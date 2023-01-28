@@ -58,3 +58,7 @@ typedef struct Superset {
 // Remove "EZEML" from project
 // This new RD system makes it easier to do versioning.
 // prefix vs postfix operators
+// Bring enums into this file
+// Descriptive error handling
+// - EX: printf("Too many variable reps\n"); -> You have 6 variable reps [...], but only designate 5 sets.
+// Figure out what memory is not getting initialized as 0
