@@ -10,6 +10,7 @@
 static char version[4]; // up to 9.9
 static char weight[4];
 
+static char *emlString;
 static int emlstringlen;
 static int current_postition;
 
@@ -25,11 +26,11 @@ void print_token(single_t s);
 void print_super(super_t s);
 void validate_header_t(header_t *h);
 void rolling_int(char new_char, int *dest);
-void parse(char* emlString);
-void parse_header(char* emlString);
-void parse_header_t(char* emlString, header_t* tht);
-void parse_super_t(char *emlString, super_t *tsupt);
-void parse_single_t(char *emlString, single_t *tst);
+void parse();
+void parse_header();
+void parse_header_t(header_t* tht);
+void parse_super_t(super_t *tsupt);
+void parse_single_t(single_t *tst);
 
 // https://stackoverflow.com/a/3536261
 typedef struct {
@@ -88,24 +89,27 @@ int main(int argc, char *argv[]){
     // With RPE modifiers
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4%100,3,2@40000,1)@120;"; // standard varied with modifiers and macros
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
 
     // Superset/Circuit
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
-
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
     emlstringlen = strlen(emlstring);
     printf("String length: %i\n", emlstringlen);
+
+    emlString = malloc(sizeof(char) * emlstringlen + 1);
+
+    strcpy(emlString, emlstring);
 
     // super_t tsupt = empty_super_t;
     // Parser options
     // bool debug_print_current = false;
 
-    parse(emlstring);
+    parse(emlString);
     printf("-------------------------\n");
     printf("parsed version: %s, parsed weight: %s\n", version, weight);
 }
 
-void parse(char* emlString) {
+void parse() {
     current_postition = 0;
 
     super_t tsupt = empty_super_t;
@@ -117,15 +121,15 @@ void parse(char* emlString) {
 
         switch (current){
         case (int)'{': // Give control to parse_header()
-            parse_header(emlString);
+            parse_header();
             break;
         case (int)'s': // Give control to parse_super_t()
-            parse_super_t(emlString, &tsupt);
+            parse_super_t(&tsupt);
             break;
         case (int)'c': // Give control to parse_super_t() *probably
             break;
         case (int)'\"': // Give control to parse_single_t()
-            parse_single_t(emlString, &tst);
+            parse_single_t(&tst);
             break;
         case (int)';':
             printf("End token\n");
@@ -142,7 +146,7 @@ void parse(char* emlString) {
 }
 
 // Starts on "{" of header, ends on char succeeding "}"
-void parse_header(char* emlString) {
+void parse_header() {
     header_t tht = empty_header_t;
 
     while (current_postition < emlstringlen) {
@@ -161,7 +165,7 @@ void parse_header(char* emlString) {
             ++current_postition;
             break;
         case (int)'\"':
-            parse_header_t(emlString, &tht); // Pass control to new_parse_header_t()
+            parse_header_t(&tht); // Pass control to new_parse_header_t()
             break;
         default:
             exit(-1);
@@ -170,7 +174,7 @@ void parse_header(char* emlString) {
     }
 }
 
-void parse_header_t(char* emlString, header_t* tht) {
+void parse_header_t(header_t* tht) {
     bool header_header_t_pv = false; // Toggle between parameter & value
 
     while (current_postition < emlstringlen) {
@@ -202,7 +206,7 @@ void parse_header_t(char* emlString, header_t* tht) {
 }
 
 // Starts on 's' of super. Ends on ')'.
-void parse_super_t(char *emlString, super_t *tsupt) {
+void parse_super_t(super_t *tsupt) {
 
     single_t tst = empty_single_t;
     Array dynamicSets; // janky, I don't like this
@@ -217,7 +221,7 @@ void parse_super_t(char *emlString, super_t *tsupt) {
                 ++current_postition;
                 break;
             case (int)'\"':
-                parse_single_t(emlString, &tst);
+                parse_single_t(&tst);
                 break;
             case (int)';':
                 ++current_postition;
@@ -241,7 +245,7 @@ void parse_super_t(char *emlString, super_t *tsupt) {
 }
 
 // Starts on NAME ('"'), ends on ':'
-void parse_single_t(char *emlString, single_t *tst) {
+void parse_single_t(single_t *tst) {
     kind_flag kind = none;
     modifier_flag modifier = no_mod; 
     bool body_single_t_nw = false; // Toggle between name & work
