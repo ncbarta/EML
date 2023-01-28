@@ -22,15 +22,19 @@ static const struct Asymetric empty_asymetric_k;
 static const struct Single empty_single_t;
 static const struct Superset empty_super_t;
 
-void print_token(single_t s);
-void print_super(super_t s);
-void validate_header_t(header_t *h);
-void rolling_int(char new_char, int *dest);
-void parse();
-void parse_header();
-void parse_header_t(header_t* tht);
-void parse_super_t(super_t *tsupt);
-void parse_single_t(single_t *tst);
+static void validate_header_t(header_t *h);
+static void rolling_int(char new_char, int *dest);
+static void parse();
+static void parse_header();
+static void parse_header_t(header_t* tht);
+static void parse_super_t(super_t *tsupt);
+static void parse_single_t(single_t *tst);
+
+static void print_standard_k(standard_k *k);
+static void print_standard_varied_k(standard_varied_k *k);
+static void print_single_t(single_t s);
+static void print_super_t(super_t *s);
+
 
 // https://stackoverflow.com/a/3536261
 typedef struct {
@@ -89,64 +93,62 @@ int main(int argc, char *argv[]){
     // With RPE modifiers
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4%100,3,2@40000,1)@120;"; // standard varied with modifiers and macros
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
 
     // Superset/Circuit
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
     emlstringlen = strlen(emlstring);
-    printf("String length: %i\n", emlstringlen);
+
+    printf("EML String: %s, length: %i\n", emlstring, emlstringlen);
 
     emlString = malloc(sizeof(char) * emlstringlen + 1);
-
     strcpy(emlString, emlstring);
 
-    // super_t tsupt = empty_super_t;
-    // Parser options
-    // bool debug_print_current = false;
-
     parse(emlString);
-    printf("-------------------------\n");
-    printf("parsed version: %s, parsed weight: %s\n", version, weight);
+    free(emlString);
+    return 0;
 }
 
-void parse() {
+static void parse() {
     current_postition = 0;
 
     super_t tsupt = empty_super_t;
     single_t tst = empty_single_t;
 
     while (current_postition < emlstringlen) {
-        printf("current position: %i, len: %i, str: %s\n", current_postition, emlstringlen, emlString);
         char current = emlString[current_postition]; // emlString: ""
 
-        switch (current){
+        switch (current) {
         case (int)'{': // Give control to parse_header()
             parse_header();
+            printf("parsed version: %s, parsed weight: %s\n", version, weight);
+            printf("-------------------------\n");
             break;
         case (int)'s': // Give control to parse_super_t()
             parse_super_t(&tsupt);
+            print_super_t(&tsupt);
             break;
         case (int)'c': // Give control to parse_super_t() *probably
             break;
         case (int)'\"': // Give control to parse_single_t()
             parse_single_t(&tst);
+            print_single_t(tst);
             break;
         case (int)';':
-            printf("End token\n");
             ++current_postition;
             break;
         case (int)')':
-            printf("End super\n");
             ++current_postition;
             break;
         default:
             break;
         }
     }
+    return;
 }
 
 // Starts on "{" of header, ends on char succeeding "}"
-void parse_header() {
+static void parse_header() {
     header_t tht = empty_header_t;
 
     while (current_postition < emlstringlen) {
@@ -174,7 +176,7 @@ void parse_header() {
     }
 }
 
-void parse_header_t(header_t* tht) {
+static void parse_header_t(header_t* tht) {
     bool header_header_t_pv = false; // Toggle between parameter & value
 
     while (current_postition < emlstringlen) {
@@ -206,7 +208,7 @@ void parse_header_t(header_t* tht) {
 }
 
 // Starts on 's' of super. Ends on ')'.
-void parse_super_t(super_t *tsupt) {
+static void parse_super_t(super_t *tsupt) {
 
     single_t tst = empty_single_t;
     Array dynamicSets; // janky, I don't like this
@@ -225,7 +227,6 @@ void parse_super_t(super_t *tsupt) {
                 break;
             case (int)';':
                 ++current_postition;
-                printf("End token (in super)\n");
                 insertArray(&dynamicSets, tst);
                 tst = empty_single_t;
                 break;
@@ -245,7 +246,7 @@ void parse_super_t(super_t *tsupt) {
 }
 
 // Starts on NAME ('"'), ends on ':'
-void parse_single_t(single_t *tst) {
+static void parse_single_t(single_t *tst) {
     kind_flag kind = none;
     modifier_flag modifier = no_mod; 
     bool body_single_t_nw = false; // Toggle between name & work
@@ -542,7 +543,6 @@ void parse_single_t(single_t *tst) {
             }
 
             buffer_int = -1;
-            print_token(*tst);
 
             return; // Give control back
         default:
@@ -567,7 +567,7 @@ void parse_single_t(single_t *tst) {
     }
 }
 
-void validate_header_t(header_t *h) {
+static void validate_header_t(header_t *h) {
 
     // printf("parameter: %s, value: %s\n", h->parameter, h->value);
 
@@ -583,7 +583,7 @@ void validate_header_t(header_t *h) {
 }
 
 // Creates an integer character by character left to right
-void rolling_int(char new_char, int *dest) {
+static void rolling_int(char new_char, int *dest) {
     if (*dest == -1) {
         *dest = 0;
     }
@@ -592,218 +592,94 @@ void rolling_int(char new_char, int *dest) {
     return;
 }
 
-void print_token(single_t s) {
+static void print_standard_k(standard_k *k) {
+    reps reps = k->reps;
+
+    if (reps.isTime) {
+    printf("%i time sets ", k->sets);
+
+        if (reps.value == -1) {
+            printf("to failure ");
+        } else {
+            printf("of %i seconds ", reps.value);
+        }
+    } else {
+        printf("%i sets ", k->sets);
+
+        if (reps.value == -1) {
+            printf("to failure ");
+        } else {
+            printf("of %i reps ", reps.value);
+        }
+    }
+
+    if (reps.weight != -1) {
+        printf("with %i %s", reps.weight, weight);
+    }
+    if (reps.rpe != -1) {
+        printf("with RPE of %i", reps.rpe);
+    }
+
+    printf("\n");
+}
+
+static void print_standard_varied_k(standard_varied_k *k) {
+    int count = k->sets;
+    printf("%i sets\n", count);
+    for (int i = 0; i < count; i++) {
+        printf(" - ");
+
+        // standard_varied_k emulates standard_k for printing
+        standard_k shim = empty_standard_k;
+        shim.sets = k->sets;
+        shim.reps = k->vReps[i];
+        print_standard_k(&shim);
+        printf("\n");
+    }
+}
+
+static void print_single_t(single_t s) {
     printf("--- Printing single_t ---\n");
     printf("Name: %s\n", s.name);
 
     if (s.no_work != NULL) {
         printf("No work\n");
     } else if (s.standard_work != NULL) {
-        reps reps = s.standard_work->reps;
         printf("Standard work\n");
-        if (reps.isTime) {
-            printf("%i time sets ", s.standard_work->sets);
-
-            if (reps.value == -1) {
-                printf("to failure ");
-            } else {
-                printf("of %i seconds ", reps.value);
-            }
-        } else {
-            printf("%i sets ", s.standard_work->sets);
-
-            if (reps.value == -1) {
-                printf("to failure ");
-            } else {
-                printf("of %i reps ", reps.value);
-            }
-        }
-
-        if (reps.weight != -1) {
-            printf("with %i %s", reps.weight, weight);
-        }
-        if (reps.rpe != -1) {
-            printf("with RPE of %i", reps.rpe);
-        }
-
-        printf("\n");
+        print_standard_k(s.standard_work);
     } else if (s.standard_varied_work != NULL) {
-        int count = s.standard_varied_work->sets;
         printf("Standard varied work\n");
-        printf("%i sets\n", count);
-        for (int i = 0; i < count; i++) {
-            reps reps = s.standard_varied_work->vReps[i];
-            printf(" - ");
-
-            if (reps.isTime) {
-                printf("time set ");
-
-                if (reps.value == -1) {
-                    printf("to failure ");
-                } else {
-                    printf("of %i seconds ", reps.value);
-                }
-            } else {
-                if (reps.value == -1) {
-                    printf("to failure ");
-                } else {
-                    printf("of %i reps ", reps.value);
-                }
-            }
-
-            if (reps.weight != -1) {
-                printf("with %i %s", reps.weight, weight);
-            }
-            if (reps.rpe != -1) {
-                printf("with RPE of %i", reps.rpe);
-            }
-
-            printf("\n");
-        }
+        print_standard_varied_k(s.standard_varied_work);
     } else if (s.asymetric_work != NULL) {
         printf("Asymetric work\n");
 
         if (s.asymetric_work->left_none_k != NULL) {
             printf("LEFT: No work\n");
         } else if (s.asymetric_work->left_standard_k != NULL) {
-            reps reps = s.asymetric_work->left_standard_k->reps;
             printf("LEFT: Standard work ");
-
-            if (reps.isTime) {
-                printf("%i time sets ", s.asymetric_work->left_standard_k->sets);
-                if (reps.value == -1) {
-                    printf("to failure ");
-                } else {
-                    printf("of %i seconds ", reps.value);
-                }
-            } else {
-                printf("%i sets ", s.asymetric_work->left_standard_k->sets);
-
-                if (reps.value == -1) {
-                    printf("to failure ");
-                } else {
-                    printf("of %i reps ", reps.value);
-                }
-            }
-
-            if (reps.weight != -1) {
-                printf("with %i %s", reps.weight, weight);
-            }
-            if (reps.rpe != -1) {
-                printf("with RPE of %i", reps.rpe);
-            }
-
-            printf("\n");
+            print_standard_k(s.asymetric_work->left_standard_k);
         } else if (s.asymetric_work->left_standard_varied_k != NULL) {
-            int count = s.asymetric_work->left_standard_varied_k->sets;
             printf("LEFT: Standard varied work ");
-            printf("%i sets\n", count);
-            for (int i = 0; i < count; i++) {
-                reps reps = s.asymetric_work->left_standard_varied_k->vReps[i];
-                printf(" - ");
-
-                if (reps.isTime) {
-                    printf("time set ");
-
-                    if (reps.value == -1) {
-                        printf("to failure ");
-                    } else {
-                        printf("of %i seconds ", reps.value);
-                    }
-                } else {
-                    if (reps.value == -1) {
-                        printf("to failure ");
-                    } else {
-                        printf("of %i reps ", reps.value);
-                    }
-                }
-
-                if (reps.weight != -1) {
-                    printf("with %i %s", reps.weight, weight);
-                }
-                if (reps.rpe != -1) {
-                    printf("with RPE of %i", reps.rpe);
-                }
-
-                printf("\n");
-            }
+            print_standard_varied_k(s.asymetric_work->left_standard_varied_k);
         }
 
         if (s.asymetric_work->right_none_k != NULL) {
             printf("RIGHT: No work\n");
         } else if (s.asymetric_work->right_standard_k != NULL) {
-            reps reps = s.asymetric_work->right_standard_k->reps;
             printf("RIGHT: Standard work ");
-
-            if (reps.isTime) {
-                printf("%i time sets ", s.asymetric_work->right_standard_k->sets);
-
-                if (reps.value == -1) {
-                    printf("to failure ");
-                } else {
-                    printf("of %i seconds ", reps.value);
-                }
-            } else {
-                printf("%i sets ", s.asymetric_work->right_standard_k->sets);
-
-                if (reps.value == -1) {
-                    printf("to failure ");
-                } else {
-                    printf("of %i reps ", reps.value);
-                }
-            }
-
-            if (reps.weight != -1) {
-                printf("with %i %s", reps.weight, weight);
-            }
-            if (reps.rpe != -1) {
-                printf("with RPE of %i", reps.rpe);
-            }
-
-            printf("\n");
+            print_standard_k(s.asymetric_work->right_standard_k);
         } else if (s.asymetric_work->right_standard_varied_k != NULL) {
-            int count = s.asymetric_work->right_standard_varied_k->sets;
             printf("RIGHT: Standard varied work ");
-            printf("%i sets\n", count);
-            for (int i = 0; i < count; i++) {
-                reps reps = s.asymetric_work->right_standard_varied_k->vReps[i];
-                printf(" - ");
-
-                if (reps.isTime) {
-                    printf("time set ");
-
-                    if (reps.value == -1) {
-                        printf("to failure ");
-                    } else {
-                        printf("of %i seconds ", reps.value);
-                    }
-                } else {
-                    if (reps.value == -1) {
-                        printf("to failure ");
-                    } else {
-                        printf("of %i reps ", reps.value);
-                    }
-                }
-
-                if (reps.weight != -1) {
-                    printf("with %i %s", reps.weight, weight);
-                }
-                if (reps.rpe != -1) {
-                    printf("with RPE of %i", reps.rpe);
-                }
-
-                printf("\n");
-            }
+            print_standard_varied_k(s.asymetric_work->right_standard_varied_k);
         }
     }
-    return;
 }
 
-void print_super(super_t s) {
+static void print_super_t(super_t *s) {
     printf("-------------------- Super --------------------\n");
 
-    for (int i = 0; i < s.count; i++) {
-        print_token(s.sets[i]);
+    for (int i = 0; i < s->count; i++) {
+        print_single_t(s->sets[i]);
     }
 
     printf("------------------ Super End ------------------\n");

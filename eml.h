@@ -60,9 +60,7 @@ typedef struct Superset {
 // NOTES/TODO:
 // apparently "_t" is reserved for POSIX - change later.
 // This new RD system makes it easier to do versioning.
-// prefix vs postfix operators
 // Descriptive error handling
 // - EX: printf("Too many variable reps\n"); -> You have 6 variable reps [...], but only designate 5 sets.
 // Edge case '))' to close varied set & super at the same time - might just remove this feature or patch it up during error handling. Whichever's easier.
-// Maybe refactor: Take char* emlString out of function args.
 // Split up print functions & make print_super function
