@@ -6,13 +6,12 @@
 #define true 1
 #define false 0
 
-typedef enum SectionFlag { header, body };
-typedef enum WorkKindFlag { none, standard, standard_varied }; // asymetric not included since it is technically 2. Also you wouldn't attach a modifier to asymetric, just it's components
-typedef enum AttachingModifierFlag { no_mod, weight_mod, rpe_mod }; // is attaching a modifier to the current work
-
 // Parser parameters
 static char version[4]; // up to 9.9
 static char weight[4];
+
+static int emlstringlen;
+static int current_postition;
 
 static const struct HeaderToken empty_header_t;
 static const struct Reps empty_reps;
@@ -29,13 +28,40 @@ void rolling_int(char new_char, int *dest);
 void parse(char* emlString);
 void parse_header(char* emlString);
 void parse_header_t(char* emlString, header_t* tht);
+void parse_super_t(char *emlString, super_t *tsupt);
 void parse_single_t(char *emlString, single_t *tst);
 
-int emlstringlen;
-int current_postition;
+// https://stackoverflow.com/a/3536261
+typedef struct {
+    single_t *array;
+    size_t used;
+    size_t size;
+} Array;
+
+static void initArray(Array *a, size_t initialSize) {
+    a->array = malloc(initialSize * sizeof(single_t));
+    a->used = 0;
+    a->size = initialSize;
+}
+
+static void insertArray(Array *a, single_t element) {
+    // a->used is the number of used entries, because a->array[a->used++] updates a->used only *after* the array has been accessed.
+    // Therefore a->used can go up to a->size
+    if (a->used == a->size) {
+        a->size *= 2;
+        a->array = realloc(a->array, a->size * sizeof(single_t));
+    }
+    a->array[a->used++] = element;
+}
+
+static void freeArray(Array *a) {
+    free(a->array);
+    a->array = NULL;
+    a->used = a->size = 0;
+}
 
 int main(int argc, char *argv[]){
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
@@ -65,7 +91,7 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
 
     // Superset/Circuit
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
 
     emlstringlen = strlen(emlstring);
     printf("String length: %i\n", emlstringlen);
@@ -77,35 +103,37 @@ int main(int argc, char *argv[]){
     parse(emlstring);
     printf("-------------------------\n");
     printf("parsed version: %s, parsed weight: %s\n", version, weight);
-
-
 }
 
 void parse(char* emlString) {
     current_postition = 0;
 
+    super_t tsupt = empty_super_t;
     single_t tst = empty_single_t;
 
     while (current_postition < emlstringlen) {
-        char current = emlString[current_postition];
+        printf("current position: %i, len: %i, str: %s\n", current_postition, emlstringlen, emlString);
+        char current = emlString[current_postition]; // emlString: ""
 
         switch (current){
-        case (int)'{': // Give control to new_parse_header()
+        case (int)'{': // Give control to parse_header()
             parse_header(emlString);
             break;
-        case (int)'s': // Give control to new_parse_super_t()
+        case (int)'s': // Give control to parse_super_t()
+            parse_super_t(emlString, &tsupt);
             break;
-        case (int)'c': // Give control to new_parse_super_t() *probably
+        case (int)'c': // Give control to parse_super_t() *probably
             break;
-        case (int)'\"': // Give control to new_parse_single_t()
+        case (int)'\"': // Give control to parse_single_t()
             parse_single_t(emlString, &tst);
             break;
         case (int)';':
             printf("End token\n");
             ++current_postition;
             break;
-        case (int)'\0':
-            printf("End of string\n");
+        case (int)')':
+            printf("End super\n");
+            ++current_postition;
             break;
         default:
             break;
@@ -173,11 +201,51 @@ void parse_header_t(char* emlString, header_t* tht) {
     }
 }
 
+// Starts on 's' of super. Ends on ')'.
+void parse_super_t(char *emlString, super_t *tsupt) {
+
+    single_t tst = empty_single_t;
+    Array dynamicSets; // janky, I don't like this
+
+    initArray(&dynamicSets, 2);
+
+    while (current_postition < emlstringlen) {
+        char current = emlString[current_postition];
+
+        switch (current) {
+            case (int)'(':
+                ++current_postition;
+                break;
+            case (int)'\"':
+                parse_single_t(emlString, &tst);
+                break;
+            case (int)';':
+                ++current_postition;
+                printf("End token (in super)\n");
+                insertArray(&dynamicSets, tst);
+                tst = empty_single_t;
+                break;
+            case (int)')':
+                // pass back tsupt
+                tsupt->count = dynamicSets.used;
+                for (int i = 0; i < dynamicSets.used; i++) {
+                    tsupt->sets[i] = dynamicSets.array[i];
+                }
+                freeArray(&dynamicSets);
+                return;
+            default:
+                ++current_postition;
+                break;
+        }
+    }
+}
+
+// Starts on NAME ('"'), ends on ':'
 void parse_single_t(char *emlString, single_t *tst) {
-    enum WorkKindFlag kind = none;
-    enum AttachingModifierFlag modifier = no_mod; 
+    kind_flag kind = none;
+    modifier_flag modifier = no_mod; 
     bool body_single_t_nw = false; // Toggle between name & work
-    int body_standard_varied_vcount = 0; 
+    int body_standard_varied_vcount = 0;  // Index of standard_varied_k.vReps[]
     bool is_asymetric = false;
 
     int buffer_int = -1; // default -1: AKA 'F' or 'no weight/rpe'

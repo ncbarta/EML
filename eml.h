@@ -1,6 +1,10 @@
 // Utility
 typedef int bool;
 
+// Parser flag types
+typedef enum WorkKindFlag { none, standard, standard_varied } kind_flag; // asymetric not included since it is technically 2. Also you wouldn't attach a modifier to asymetric, just it's components
+typedef enum AttachingModifierFlag { no_mod, weight_mod, rpe_mod } modifier_flag; // is attaching a modifier to the current work
+
 // Header Token
 typedef struct HeaderToken {
     char parameter[24]; // maybe malloc these instead
@@ -55,10 +59,10 @@ typedef struct Superset {
 
 // NOTES/TODO:
 // apparently "_t" is reserved for POSIX - change later.
-// Remove "EZEML" from project
 // This new RD system makes it easier to do versioning.
 // prefix vs postfix operators
-// Bring enums into this file
 // Descriptive error handling
 // - EX: printf("Too many variable reps\n"); -> You have 6 variable reps [...], but only designate 5 sets.
-// Figure out what memory is not getting initialized as 0
+// Edge case '))' to close varied set & super at the same time - might just remove this feature or patch it up during error handling. Whichever's easier.
+// Maybe refactor: Take char* emlString out of function args.
+// Split up print functions & make print_super function
