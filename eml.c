@@ -196,6 +196,14 @@ void new_parse_single_t(char *emlString, single_t *tst) {
             // Upgrade standard_kind to standard_varied_kind
             tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(int));
             tst->standard_varied_work->sets = tst->standard_work->sets;
+
+            // standard_varied_kind defaults
+            for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+                tst->standard_varied_work->vReps[i].weight = -1;
+                tst->standard_varied_work->vReps[i].rpe = -1;
+                tst->standard_varied_work->vReps[i].isTime = false;
+            }
+
             body_standard_varied_vcount = 0;
 
             free(tst->standard_work);
@@ -213,16 +221,12 @@ void new_parse_single_t(char *emlString, single_t *tst) {
             switch (modifier) {
             case no_mod:
                 tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = -1;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = -1;
                 break;
             case weight_mod:
                 tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = buffer_int;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = -1;
                 break;
             case rpe_mod:
                 tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = buffer_int;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = -1;
                 break;
             }
 
@@ -240,16 +244,12 @@ void new_parse_single_t(char *emlString, single_t *tst) {
             switch (modifier) {
             case no_mod:
                 tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = -1;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = -1;
                 break;
             case weight_mod:
                 tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = buffer_int;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = -1;
                 break;
             case rpe_mod:
                 tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = buffer_int;
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = -1;
                 break;
             }
 
@@ -374,16 +374,16 @@ void new_parse_single_t(char *emlString, single_t *tst) {
 
             if (is_asymetric == true) {
                 if (tst->no_work != NULL) {
-                        tst->asymetric_work->right_none_k = tst->no_work;
-                        tst->no_work = NULL;
+                    tst->asymetric_work->right_none_k = tst->no_work;
+                    tst->no_work = NULL;
                 }
                 else if (tst->standard_work != NULL) {
-                        tst->asymetric_work->right_standard_k = tst->standard_work;
-                        tst->standard_work = NULL;
+                    tst->asymetric_work->right_standard_k = tst->standard_work;
+                    tst->standard_work = NULL;
                 }
                 else if (tst->standard_varied_work != NULL) {
-                        tst->asymetric_work->right_standard_varied_k = tst->standard_varied_work;
-                        tst->standard_varied_work = NULL;
+                    tst->asymetric_work->right_standard_varied_k = tst->standard_varied_work;
+                    tst->standard_varied_work = NULL;
                 }
             }
 
@@ -391,17 +391,6 @@ void new_parse_single_t(char *emlString, single_t *tst) {
             print_token(*tst);
 
             return; // Give control back
-
-            // RESET
-            // I haven't thought out the interface yet, so don't worry about the memory leaks.
-            // For the time being this program only prints things out.
-            // tst = empty_single_t;
-            // kind = none;
-            // modifier = no_mod;
-            // body_single_t_nw = false;
-            // body_standard_varied_vcount = 0;
-            // is_asymetric = false;
-            // break;
         default:
             if (body_single_t_nw == false) {
                 strncat(tst->name, &current, 1);
@@ -460,10 +449,10 @@ void new_parse(char* emlString) {
 
 
 int main(int argc, char *argv[]){
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\"::4x(4,3,2,1);"; // asymetrical mixed
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":;"; // none
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\"::;"; // asymetric none
