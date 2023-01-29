@@ -6,9 +6,10 @@ Spec: https://www.nathanbarta.com/posts/ezeml/
 
 Parsing single tokens of any kind with any modifier(s). <- See spec for terminology 
 
+Parsing supersets & circuits (mostly untested right now!)
+
 # What's there to do
 
-- Implement SUPER and CIRCUIT
 - Add an interface
 - Address copious security issues
 - Write test cases 
@@ -16,5 +17,4 @@ Parsing single tokens of any kind with any modifier(s). <- See spec for terminol
 - Add decimals 
 - Add error messages
 - Refactor
-- Clean things up & make syntax, project structure, more 'C' like
 - Bindings to Swift, Go, Python
