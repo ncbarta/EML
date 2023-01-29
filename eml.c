@@ -24,6 +24,7 @@ static const struct Superset empty_super_t;
 
 static void validate_header_t(header_t *h);
 static void rolling_int(char new_char, int *dest);
+
 static void parse();
 static void parse_header();
 static void parse_header_t(header_t* tht);
@@ -34,7 +35,6 @@ static void print_standard_k(standard_k *k);
 static void print_standard_varied_k(standard_varied_k *k);
 static void print_single_t(single_t s);
 static void print_super_t(super_t *s);
-
 
 // https://stackoverflow.com/a/3536261
 typedef struct {
@@ -50,8 +50,6 @@ static void initArray(Array *a, size_t initialSize) {
 }
 
 static void insertArray(Array *a, single_t element) {
-    // a->used is the number of used entries, because a->array[a->used++] updates a->used only *after* the array has been accessed.
-    // Therefore a->used can go up to a->size
     if (a->used == a->size) {
         a->size *= 2;
         a->array = realloc(a->array, a->size * sizeof(single_t));
@@ -113,10 +111,11 @@ static void parse() {
     current_postition = 0;
 
     super_t tsupt = empty_super_t;
+    circuit_t tcirt = empty_super_t;
     single_t tst = empty_single_t;
 
     while (current_postition < emlstringlen) {
-        char current = emlString[current_postition]; // emlString: ""
+        char current = emlString[current_postition];
 
         switch (current) {
         case (int)'{': // Give control to parse_header()
@@ -129,6 +128,8 @@ static void parse() {
             print_super_t(&tsupt);
             break;
         case (int)'c': // Give control to parse_super_t() *probably
+            parse_super_t(&tcirt);
+            print_super_t(&tcirt); // going to call it "SUPER", but that's fine for now.
             break;
         case (int)'\"': // Give control to parse_single_t()
             parse_single_t(&tst);
@@ -231,6 +232,12 @@ static void parse_super_t(super_t *tsupt) {
                 tst = empty_single_t;
                 break;
             case (int)')':
+                // Closing a superset & single_t.standard_varied_work
+                // if (single) {
+                //     insertArray(&dynamicSets, tst);
+                //     tst = empty_single_t;
+                // }
+
                 // pass back tsupt
                 tsupt->count = dynamicSets.used;
                 for (int i = 0; i < dynamicSets.used; i++) {
@@ -677,12 +684,9 @@ static void print_single_t(single_t s) {
 
 static void print_super_t(super_t *s) {
     printf("-------------------- Super --------------------\n");
-
     for (int i = 0; i < s->count; i++) {
         print_single_t(s->sets[i]);
     }
-
     printf("------------------ Super End ------------------\n");
-
     return;
 }

@@ -57,10 +57,21 @@ typedef struct Superset {
     single_t sets[];
 } super_t;
 
+typedef super_t circuit_t;
+
+// EML Objects
+
+typedef enum EMLObjtype { single, super, circuit } eml_objtype;
+typedef struct EMLObj {
+    eml_objtype type;
+    void        *data;
+} eml_obj;
+
 // NOTES/TODO:
 // apparently "_t" is reserved for POSIX - change later.
 // This new RD system makes it easier to do versioning.
 // Descriptive error handling
 // - EX: printf("Too many variable reps\n"); -> You have 6 variable reps [...], but only designate 5 sets.
 // Edge case '))' to close varied set & super at the same time - might just remove this feature or patch it up during error handling. Whichever's easier.
-// Split up print functions & make print_super function
+// - Also doccument this bc it's not on the spec
+// Make an interface. 
