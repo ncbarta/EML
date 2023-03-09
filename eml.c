@@ -28,33 +28,39 @@ static void rolling_int(char new_char, int *dest);
 static void parse();
 static void parse_header();
 static void parse_header_t(header_t* tht);
-static void parse_super_t(super_t *tsupt);
-static void parse_single_t(single_t *tst);
+static super_t *parse_super_t();
+static single_t *parse_single_t();
 
 static void print_standard_k(standard_k *k);
 static void print_standard_varied_k(standard_varied_k *k);
-static void print_single_t(single_t s);
+static void print_single_t(single_t *s);
 static void print_super_t(super_t *s);
 
 // https://stackoverflow.com/a/3536261
 typedef struct {
-    single_t *array;
+    eml_obj *array;
     size_t used;
     size_t size;
 } Array;
 
-static void initArray(Array *a, size_t initialSize) {
-    a->array = malloc(initialSize * sizeof(single_t));
+static void initArray(Array *a, size_t size) {
+    a->array = calloc(size, sizeof(eml_obj));
+    if (a->array == NULL) {
+        exit(1);
+    }
     a->used = 0;
-    a->size = initialSize;
+    a->size = size;
 }
 
-static void insertArray(Array *a, single_t element) {
+static void insertArray(Array *a, eml_obj obj) {
     if (a->used == a->size) {
         a->size *= 2;
-        a->array = realloc(a->array, a->size * sizeof(single_t));
+        a->array = realloc(a->array, a->size * sizeof(eml_obj));
+        if (a->array == NULL) {
+            exit(1);
+        }
     }
-    a->array[a->used++] = element;
+    a->array[a->used++] = obj;
 }
 
 static void freeArray(Array *a) {
@@ -62,6 +68,8 @@ static void freeArray(Array *a) {
     a->array = NULL;
     a->used = a->size = 0;
 }
+
+static eml_obj result[1];
 
 int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
@@ -102,17 +110,30 @@ int main(int argc, char *argv[]){
     emlString = malloc(sizeof(char) * emlstringlen + 1);
     strcpy(emlString, emlstring);
 
-    parse(emlString);
+    // https://linux.die.net/man/3/asprintf
+
+    printf(emlString);
+    fflush(stdout);
+
+    parse();
+
+    // maybe add a print_emlobj()
+
+    // print_single_t(*(single_t *) result[0].data);
+    print_super_t((super_t *) result[0].data);
+
     free(emlString);
     return 0;
 }
 
+
+
 static void parse() {
     current_postition = 0;
 
-    super_t tsupt = empty_super_t;
+    super_t *tsupt = NULL;
     circuit_t tcirt = empty_super_t;
-    single_t tst = empty_single_t;
+    single_t *tst = NULL; // make null initially & set right before parsing
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -124,16 +145,27 @@ static void parse() {
             printf("-------------------------\n");
             break;
         case (int)'s': // Give control to parse_super_t()
-            parse_super_t(&tsupt);
-            print_super_t(&tsupt);
+            tsupt = parse_super_t();
+
+            eml_obj temp_super;
+            temp_super.type = super;
+            temp_super.data = tsupt;
+
+            result[0] = temp_super;
+
             break;
         case (int)'c': // Give control to parse_super_t() *probably
             parse_super_t(&tcirt);
             print_super_t(&tcirt); // going to call it "SUPER", but that's fine for now.
             break;
         case (int)'\"': // Give control to parse_single_t()
-            parse_single_t(&tst);
-            print_single_t(tst);
+            tst = parse_single_t(tst);
+
+            eml_obj temp_single;
+            temp_single.type = single;
+            temp_single.data = tst;
+            result[0] = temp_single;
+
             break;
         case (int)';':
             ++current_postition;
@@ -209,9 +241,10 @@ static void parse_header_t(header_t* tht) {
 }
 
 // Starts on 's' of super. Ends on ')'.
-static void parse_super_t(super_t *tsupt) {
+static super_t *parse_super_t() {
+    super_t *tsupt = NULL;
+    single_t *tst = NULL;
 
-    single_t tst = empty_single_t;
     Array dynamicSets; // janky, I don't like this
 
     initArray(&dynamicSets, 2);
@@ -224,12 +257,16 @@ static void parse_super_t(super_t *tsupt) {
                 ++current_postition;
                 break;
             case (int)'\"':
-                parse_single_t(&tst);
+                tst = parse_single_t();
                 break;
             case (int)';':
                 ++current_postition;
-                insertArray(&dynamicSets, tst);
-                tst = empty_single_t;
+
+                eml_obj temp;
+                temp.type = single;
+                temp.data = tst;
+                insertArray(&dynamicSets, temp);
+
                 break;
             case (int)')':
                 // Closing a superset & single_t.standard_varied_work
@@ -239,12 +276,14 @@ static void parse_super_t(super_t *tsupt) {
                 // }
 
                 // pass back tsupt
+                tsupt = calloc(1, sizeof(int) + sizeof(single_t) * dynamicSets.used);
                 tsupt->count = dynamicSets.used;
                 for (int i = 0; i < dynamicSets.used; i++) {
-                    tsupt->sets[i] = dynamicSets.array[i];
+                    tsupt->sets[i] = *((single_t*) dynamicSets.array[i].data);
                 }
                 freeArray(&dynamicSets);
-                return;
+
+                return tsupt;
             default:
                 ++current_postition;
                 break;
@@ -253,7 +292,9 @@ static void parse_super_t(super_t *tsupt) {
 }
 
 // Starts on NAME ('"'), ends on ':'
-static void parse_single_t(single_t *tst) {
+static single_t *parse_single_t() {
+    single_t *tst = calloc(1, sizeof(single_t));
+
     kind_flag kind = none;
     modifier_flag modifier = no_mod; 
     bool body_single_t_nw = false; // Toggle between name & work
@@ -551,7 +592,7 @@ static void parse_single_t(single_t *tst) {
 
             buffer_int = -1;
 
-            return; // Give control back
+            return tst; // Give control back
         default:
             if (body_single_t_nw == false) {
                 strncat(tst->name, &current, 1);
@@ -645,39 +686,39 @@ static void print_standard_varied_k(standard_varied_k *k) {
     }
 }
 
-static void print_single_t(single_t s) {
+static void print_single_t(single_t *s) {
     printf("--- Printing single_t ---\n");
-    printf("Name: %s\n", s.name);
+    printf("Name: %s\n", s->name);
 
-    if (s.no_work != NULL) {
+    if (s->no_work != NULL) {
         printf("No work\n");
-    } else if (s.standard_work != NULL) {
+    } else if (s->standard_work != NULL) {
         printf("Standard work\n");
-        print_standard_k(s.standard_work);
-    } else if (s.standard_varied_work != NULL) {
+        print_standard_k(s->standard_work);
+    } else if (s->standard_varied_work != NULL) {
         printf("Standard varied work\n");
-        print_standard_varied_k(s.standard_varied_work);
-    } else if (s.asymetric_work != NULL) {
+        print_standard_varied_k(s->standard_varied_work);
+    } else if (s->asymetric_work != NULL) {
         printf("Asymetric work\n");
 
-        if (s.asymetric_work->left_none_k != NULL) {
+        if (s->asymetric_work->left_none_k != NULL) {
             printf("LEFT: No work\n");
-        } else if (s.asymetric_work->left_standard_k != NULL) {
+        } else if (s->asymetric_work->left_standard_k != NULL) {
             printf("LEFT: Standard work ");
-            print_standard_k(s.asymetric_work->left_standard_k);
-        } else if (s.asymetric_work->left_standard_varied_k != NULL) {
+            print_standard_k(s->asymetric_work->left_standard_k);
+        } else if (s->asymetric_work->left_standard_varied_k != NULL) {
             printf("LEFT: Standard varied work ");
-            print_standard_varied_k(s.asymetric_work->left_standard_varied_k);
+            print_standard_varied_k(s->asymetric_work->left_standard_varied_k);
         }
 
-        if (s.asymetric_work->right_none_k != NULL) {
+        if (s->asymetric_work->right_none_k != NULL) {
             printf("RIGHT: No work\n");
-        } else if (s.asymetric_work->right_standard_k != NULL) {
+        } else if (s->asymetric_work->right_standard_k != NULL) {
             printf("RIGHT: Standard work ");
-            print_standard_k(s.asymetric_work->right_standard_k);
-        } else if (s.asymetric_work->right_standard_varied_k != NULL) {
+            print_standard_k(s->asymetric_work->right_standard_k);
+        } else if (s->asymetric_work->right_standard_varied_k != NULL) {
             printf("RIGHT: Standard varied work ");
-            print_standard_varied_k(s.asymetric_work->right_standard_varied_k);
+            print_standard_varied_k(s->asymetric_work->right_standard_varied_k);
         }
     }
 }
@@ -685,7 +726,7 @@ static void print_single_t(single_t s) {
 static void print_super_t(super_t *s) {
     printf("-------------------- Super --------------------\n");
     for (int i = 0; i < s->count; i++) {
-        print_single_t(s->sets[i]);
+        print_single_t(&s->sets[i]);
     }
     printf("------------------ Super End ------------------\n");
     return;
