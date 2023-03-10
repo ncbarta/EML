@@ -69,7 +69,6 @@ typedef struct EMLObj {
 
 // NOTES/TODO:
 // apparently "_t" is reserved for POSIX - change later.
-// This new RD system makes it easier to do versioning.
 // Descriptive error handling
 // - EX: printf("Too many variable reps\n"); -> You have 6 variable reps [...], but only designate 5 sets.
 // Edge case '))' to close varied set & super at the same time - might just remove this feature or patch it up during error handling. Whichever's easier.
@@ -77,3 +76,5 @@ typedef struct EMLObj {
 // Make an interface. 
 // Make a free() function. Check ALL code to make sure it is freeing things correctly under all scenerios.
 // EML may be a bit of a misnomer. It has properties of a markup language. but it actually might fall into the category of meta-language better.
+// Function organization esp Array functions.
+// Maybe refactor super_t to have pointers to single_t

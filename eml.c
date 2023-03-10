@@ -35,6 +35,11 @@ static void print_standard_k(standard_k *k);
 static void print_standard_varied_k(standard_varied_k *k);
 static void print_single_t(single_t *s);
 static void print_super_t(super_t *s);
+static void print_emlobj(eml_obj *e);
+
+static void free_single_t(single_t *s, bool isChild);
+static void free_super_t(super_t *s);
+static void free_emlobj(eml_obj *e);
 
 // https://stackoverflow.com/a/3536261
 typedef struct {
@@ -97,12 +102,12 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3@30,20T,1)@120:3x(F,FT,FT)@550;"; // asymetrical mixed
 
     // With RPE modifiers
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4%100,3,2@40000,1)@120;"; // standard varied with modifiers and macros
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
 
     // Superset/Circuit
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
     emlstringlen = strlen(emlstring);
 
     printf("EML String: %s, length: %i\n", emlstring, emlstringlen);
@@ -112,28 +117,24 @@ int main(int argc, char *argv[]){
 
     // https://linux.die.net/man/3/asprintf
 
-    printf(emlString);
-    fflush(stdout);
+    // printf(emlString);
+    // fflush(stdout);
 
     parse();
 
-    // maybe add a print_emlobj()
-
-    // print_single_t(*(single_t *) result[0].data);
-    print_super_t((super_t *) result[0].data);
-
+    print_emlobj(&result[0]);
+    
+    free_emlobj(&result[0]);
     free(emlString);
     return 0;
 }
-
-
 
 static void parse() {
     current_postition = 0;
 
     super_t *tsupt = NULL;
     circuit_t tcirt = empty_super_t;
-    single_t *tst = NULL; // make null initially & set right before parsing
+    single_t *tst = NULL;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -291,7 +292,7 @@ static super_t *parse_super_t() {
     }
 }
 
-// Starts on NAME ('"'), ends on ':'
+// Starts on NAME ('"'), ends on ';'
 static single_t *parse_single_t() {
     single_t *tst = calloc(1, sizeof(single_t));
 
@@ -730,4 +731,77 @@ static void print_super_t(super_t *s) {
     }
     printf("------------------ Super End ------------------\n");
     return;
+}
+
+static void print_emlobj(eml_obj *e) {
+    if (e->type == single) {
+        print_single_t((single_t*) e->data);
+    } else {
+        print_super_t((super_t*) e->data);
+    }
+}
+
+static void free_single_t(single_t *s, bool isChild) {
+    if (s->no_work != NULL) {
+        free(s->no_work);
+    }
+
+    if (s->standard_work != NULL) {
+        free(s->standard_work);
+    }
+
+    if (s->standard_varied_work != NULL) {
+        free(s->standard_varied_work);
+    }
+
+    if (s->asymetric_work != NULL) {
+        if (s->asymetric_work->left_none_k != NULL) {
+            free(s->asymetric_work->left_none_k);
+        }
+
+        if (s->asymetric_work->left_standard_k != NULL) {
+            free(s->asymetric_work->left_standard_k);
+        }
+
+        if (s->asymetric_work->left_standard_varied_k != NULL) {
+            free(s->asymetric_work->left_standard_varied_k);
+        }
+
+        if (s->asymetric_work->right_none_k != NULL) {
+            free(s->asymetric_work->right_none_k);
+        }
+
+        if (s->asymetric_work->right_standard_k != NULL) {
+            free(s->asymetric_work->right_standard_k);
+        }
+
+        if (s->asymetric_work->right_standard_varied_k != NULL) {
+            free(s->asymetric_work->right_standard_varied_k);
+        }
+
+        free(s->asymetric_work);
+    }
+
+    // Not a pointer when part of a SUPER()
+    if (!isChild) {
+        free(s);
+    }
+}
+
+static void free_super_t(super_t *s) {
+    for(int i = 0; i < s->count; i++) {
+        free_single_t(&s->sets[i], true);
+    }
+
+    free(s);
+}
+
+static void free_emlobj(eml_obj *e) {
+    if (e->type == single) {
+        free_single_t((single_t*) e->data, false);
+    } else {
+        free_super_t((super_t*) e->data);
+    }
+
+    // free(e); not a pointer to dynamic memory
 }
