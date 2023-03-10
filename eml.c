@@ -37,42 +37,19 @@ static void print_single_t(single_t *s);
 static void print_super_t(super_t *s);
 static void print_emlobj(eml_obj *e);
 
-static void free_single_t(single_t *s, bool isChild);
+static void free_single_t(single_t *s);
 static void free_super_t(super_t *s);
 static void free_emlobj(eml_obj *e);
 
-// https://stackoverflow.com/a/3536261
 typedef struct {
     eml_obj *array;
     size_t used;
     size_t size;
 } Array;
 
-static void initArray(Array *a, size_t size) {
-    a->array = calloc(size, sizeof(eml_obj));
-    if (a->array == NULL) {
-        exit(1);
-    }
-    a->used = 0;
-    a->size = size;
-}
-
-static void insertArray(Array *a, eml_obj obj) {
-    if (a->used == a->size) {
-        a->size *= 2;
-        a->array = realloc(a->array, a->size * sizeof(eml_obj));
-        if (a->array == NULL) {
-            exit(1);
-        }
-    }
-    a->array[a->used++] = obj;
-}
-
-static void freeArray(Array *a) {
-    free(a->array);
-    a->array = NULL;
-    a->used = a->size = 0;
-}
+static void initArray(Array *a, size_t size);
+static void insertArray(Array *a, eml_obj obj);
+static void freeArray(Array *a);
 
 static eml_obj result[1];
 
@@ -102,12 +79,12 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3@30,20T,1)@120:3x(F,FT,FT)@550;"; // asymetrical mixed
 
     // With RPE modifiers
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4%100,3,2@40000,1)@120;"; // standard varied with modifiers and macros
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
 
     // Superset/Circuit
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
     emlstringlen = strlen(emlstring);
 
     printf("EML String: %s, length: %i\n", emlstring, emlstringlen);
@@ -280,7 +257,7 @@ static super_t *parse_super_t() {
                 tsupt = calloc(1, sizeof(int) + sizeof(single_t) * dynamicSets.used);
                 tsupt->count = dynamicSets.used;
                 for (int i = 0; i < dynamicSets.used; i++) {
-                    tsupt->sets[i] = *((single_t*) dynamicSets.array[i].data);
+                    tsupt->sets[i] = ((single_t*) dynamicSets.array[i].data);
                 }
                 freeArray(&dynamicSets);
 
@@ -290,6 +267,8 @@ static super_t *parse_super_t() {
                 break;
         }
     }
+
+    return NULL;
 }
 
 // Starts on NAME ('"'), ends on ';'
@@ -614,6 +593,8 @@ static single_t *parse_single_t() {
             break;
         }
     }
+
+    return NULL;
 }
 
 static void validate_header_t(header_t *h) {
@@ -727,7 +708,7 @@ static void print_single_t(single_t *s) {
 static void print_super_t(super_t *s) {
     printf("-------------------- Super --------------------\n");
     for (int i = 0; i < s->count; i++) {
-        print_single_t(&s->sets[i]);
+        print_single_t(s->sets[i]);
     }
     printf("------------------ Super End ------------------\n");
     return;
@@ -741,7 +722,7 @@ static void print_emlobj(eml_obj *e) {
     }
 }
 
-static void free_single_t(single_t *s, bool isChild) {
+static void free_single_t(single_t *s) {
     if (s->no_work != NULL) {
         free(s->no_work);
     }
@@ -782,15 +763,12 @@ static void free_single_t(single_t *s, bool isChild) {
         free(s->asymetric_work);
     }
 
-    // Not a pointer when part of a SUPER()
-    if (!isChild) {
-        free(s);
-    }
+    free(s);
 }
 
 static void free_super_t(super_t *s) {
     for(int i = 0; i < s->count; i++) {
-        free_single_t(&s->sets[i], true);
+        free_single_t(s->sets[i]);
     }
 
     free(s);
@@ -798,10 +776,36 @@ static void free_super_t(super_t *s) {
 
 static void free_emlobj(eml_obj *e) {
     if (e->type == single) {
-        free_single_t((single_t*) e->data, false);
+        free_single_t((single_t*) e->data);
     } else {
         free_super_t((super_t*) e->data);
     }
 
     // free(e); not a pointer to dynamic memory
+}
+
+static void initArray(Array *a, size_t size) {
+    a->array = calloc(size, sizeof(eml_obj));
+    if (a->array == NULL) {
+        exit(1);
+    }
+    a->used = 0;
+    a->size = size;
+}
+
+static void insertArray(Array *a, eml_obj obj) {
+    if (a->used == a->size) {
+        a->size *= 2;
+        a->array = realloc(a->array, a->size * sizeof(eml_obj));
+        if (a->array == NULL) {
+            exit(1);
+        }
+    }
+    a->array[a->used++] = obj;
+}
+
+static void freeArray(Array *a) {
+    free(a->array);
+    a->array = NULL;
+    a->used = a->size = 0;
 }

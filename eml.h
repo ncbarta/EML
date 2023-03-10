@@ -54,7 +54,7 @@ typedef struct Single {
 
 typedef struct Superset {
     int count;
-    single_t sets[];
+    single_t *sets[];
 } super_t;
 
 typedef super_t circuit_t;
@@ -77,4 +77,3 @@ typedef struct EMLObj {
 // Make a free() function. Check ALL code to make sure it is freeing things correctly under all scenerios.
 // EML may be a bit of a misnomer. It has properties of a markup language. but it actually might fall into the category of meta-language better.
 // Function organization esp Array functions.
-// Maybe refactor super_t to have pointers to single_t
