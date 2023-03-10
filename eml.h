@@ -74,6 +74,5 @@ typedef struct EMLObj {
 // Edge case '))' to close varied set & super at the same time - might just remove this feature or patch it up during error handling. Whichever's easier.
 // - Also doccument this bc it's not on the spec
 // Make an interface. 
-// Make a free() function. Check ALL code to make sure it is freeing things correctly under all scenerios.
 // EML may be a bit of a misnomer. It has properties of a markup language. but it actually might fall into the category of meta-language better.
-// Function organization esp Array functions.
+// Should I add indirection to the eml_objects within the result array. What would the benifits/drawbacks be?

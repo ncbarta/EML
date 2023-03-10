@@ -40,6 +40,7 @@ static void print_emlobj(eml_obj *e);
 static void free_single_t(single_t *s);
 static void free_super_t(super_t *s);
 static void free_emlobj(eml_obj *e);
+static void free_results();
 
 typedef struct {
     eml_obj *array;
@@ -51,7 +52,7 @@ static void initArray(Array *a, size_t size);
 static void insertArray(Array *a, eml_obj obj);
 static void freeArray(Array *a);
 
-static eml_obj result[1];
+static Array result;
 
 int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
@@ -97,11 +98,15 @@ int main(int argc, char *argv[]){
     // printf(emlString);
     // fflush(stdout);
 
+    initArray(&result, 4);
     parse();
 
-    print_emlobj(&result[0]);
+    // Print & Free
+    for(int i = 0; i < result.used; i++) {
+        print_emlobj(&result.array[i]);
+        free_emlobj(&result.array[i]);
+    }
     
-    free_emlobj(&result[0]);
     free(emlString);
     return 0;
 }
@@ -128,8 +133,7 @@ static void parse() {
             eml_obj temp_super;
             temp_super.type = super;
             temp_super.data = tsupt;
-
-            result[0] = temp_super;
+            insertArray(&result, temp_super);
 
             break;
         case (int)'c': // Give control to parse_super_t() *probably
@@ -142,7 +146,7 @@ static void parse() {
             eml_obj temp_single;
             temp_single.type = single;
             temp_single.data = tst;
-            result[0] = temp_single;
+            insertArray(&result, temp_single);
 
             break;
         case (int)';':
@@ -220,7 +224,7 @@ static void parse_header_t(header_t* tht) {
 
 // Starts on 's' of super. Ends on ')'.
 static super_t *parse_super_t() {
-    super_t *tsupt = NULL;
+    super_t *tsupt = NULL; // Will be allocated just in time
     single_t *tst = NULL;
 
     Array dynamicSets; // janky, I don't like this
@@ -255,6 +259,14 @@ static super_t *parse_super_t() {
 
                 // pass back tsupt
                 tsupt = calloc(1, sizeof(int) + sizeof(single_t) * dynamicSets.used);
+                if (tsupt == NULL) {
+                    for (int i = 0; i < dynamicSets.used; i++) {
+                        free(dynamicSets.array[i].data);
+                    }
+                    freeArray(&dynamicSets);
+                    free_results();
+                    exit(1);
+                }
                 tsupt->count = dynamicSets.used;
                 for (int i = 0; i < dynamicSets.used; i++) {
                     tsupt->sets[i] = ((single_t*) dynamicSets.array[i].data);
@@ -268,12 +280,29 @@ static super_t *parse_super_t() {
         }
     }
 
-    return NULL;
+    // Add error message
+    exit(1);
+
+    return NULL; // Should not return NULL
+}
+
+// Frees up memory and stops execution of parse_single_t if *p is NULL
+static void cond_bail_parse_single_t(void *p, single_t *tst) {
+    if (p == NULL) {
+        free_single_t(tst);
+        free_results();
+        exit(1);
+    }
 }
 
 // Starts on NAME ('"'), ends on ';'
+// Can not return NULL
 static single_t *parse_single_t() {
     single_t *tst = calloc(1, sizeof(single_t));
+    if (tst == NULL) {
+        free_results();
+        exit(1);
+    }
 
     kind_flag kind = none;
     modifier_flag modifier = no_mod; 
@@ -296,6 +325,7 @@ static single_t *parse_single_t() {
                 switch (kind) {
                 case none:
                     tst->no_work = malloc(sizeof(int));
+                    cond_bail_parse_single_t(tst->no_work, tst);
                     break;
                 case standard:
                     switch (modifier) {
@@ -342,6 +372,7 @@ static single_t *parse_single_t() {
                 // Upgrade to asymetric
 
                 tst->asymetric_work = malloc(sizeof(asymetric_k));
+                cond_bail_parse_single_t(tst->asymetric_work, tst);
                 tst->asymetric_work->left_none_k = NULL;
                 tst->asymetric_work->left_standard_k = NULL;
                 tst->asymetric_work->left_standard_varied_k = NULL;
@@ -368,6 +399,7 @@ static single_t *parse_single_t() {
             break;
         case (int)'x':
             tst->standard_work = malloc(sizeof(standard_k));
+            cond_bail_parse_single_t(tst->standard_work, tst);
             tst->standard_work->sets = buffer_int;
             tst->standard_work->reps.weight = -1;
             tst->standard_work->reps.rpe = -1;
@@ -378,6 +410,8 @@ static single_t *parse_single_t() {
         case (int)'(':
             // Upgrade standard_kind to standard_varied_kind
             tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(int));
+            cond_bail_parse_single_t(tst->standard_varied_work, tst);
+            
             tst->standard_varied_work->sets = tst->standard_work->sets;
 
             // standard_varied_kind defaults
@@ -515,6 +549,7 @@ static single_t *parse_single_t() {
             switch (kind) {
             case none:
                 tst->no_work = malloc(sizeof(int));
+                cond_bail_parse_single_t(tst->no_work, tst);
                 break;
             case standard:
                 switch (modifier) {
@@ -529,7 +564,6 @@ static single_t *parse_single_t() {
                     break;
                 }
 
-                // modifier = no_mod;
                 break;
             case standard_varied:
                 switch (modifier) {
@@ -551,7 +585,6 @@ static single_t *parse_single_t() {
                     break;
                 }
 
-                // modifier = no_mod;
                 break;
             }
 
@@ -594,7 +627,10 @@ static single_t *parse_single_t() {
         }
     }
 
-    return NULL;
+    // Throw error here for incomplete/incorrect eml string
+    exit(1);
+
+    return NULL; // should never execute under normal conditions
 }
 
 static void validate_header_t(header_t *h) {
@@ -784,6 +820,12 @@ static void free_emlobj(eml_obj *e) {
     // free(e); not a pointer to dynamic memory
 }
 
+static void free_results() {
+    for(int i = 0; i < result.used; i++) {
+        free_emlobj(&result.array[i]);
+    }
+}
+
 static void initArray(Array *a, size_t size) {
     a->array = calloc(size, sizeof(eml_obj));
     if (a->array == NULL) {
@@ -798,6 +840,7 @@ static void insertArray(Array *a, eml_obj obj) {
         a->size *= 2;
         a->array = realloc(a->array, a->size * sizeof(eml_obj));
         if (a->array == NULL) {
+            free_results();
             exit(1);
         }
     }
