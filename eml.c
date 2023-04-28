@@ -18,27 +18,27 @@ static const struct HeaderToken empty_header_t;
 static const struct Reps empty_reps;
 static const struct Standard empty_standard_k;
 static const struct StandardVaried empty_standard_varied_k;
-static const struct Asymetric empty_asymetric_k;
+static const struct Asymmetric empty_asymetric_k;
 static const struct Single empty_single_t;
 static const struct Superset empty_super_t;
 
-static void validate_header_t(header_t *h);
+static void validate_header_t(eml_header_t *h);
 static void rolling_int(char new_char, int *dest);
 
 static void parse();
 static void parse_header();
-static void parse_header_t(header_t* tht);
-static super_t *parse_super_t();
-static single_t *parse_single_t();
+static void parse_header_t(eml_header_t* tht);
+static eml_super_t *parse_super_t();
+static eml_single_t *parse_single_t();
 
-static void print_standard_k(standard_k *k);
-static void print_standard_varied_k(standard_varied_k *k);
-static void print_single_t(single_t *s);
-static void print_super_t(super_t *s);
+static void print_standard_k(eml_standard_k *k);
+static void print_standard_varied_k(eml_standard_varied_k *k);
+static void print_single_t(eml_single_t *s);
+static void print_super_t(eml_super_t *s);
 static void print_emlobj(eml_obj *e);
 
-static void free_single_t(single_t *s);
-static void free_super_t(super_t *s);
+static void free_single_t(eml_single_t *s);
+static void free_super_t(eml_super_t *s);
 static void free_emlobj(eml_obj *e);
 static void free_results();
 
@@ -114,9 +114,9 @@ int main(int argc, char *argv[]){
 static void parse() {
     current_postition = 0;
 
-    super_t *tsupt = NULL;
-    circuit_t tcirt = empty_super_t;
-    single_t *tst = NULL;
+    eml_super_t *tsupt = NULL;
+    eml_circuit_t *tcirt = NULL;
+    eml_single_t *tst = NULL;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -137,8 +137,13 @@ static void parse() {
 
             break;
         case (int)'c': // Give control to parse_super_t() *probably
-            parse_super_t(&tcirt);
-            print_super_t(&tcirt); // going to call it "SUPER", but that's fine for now.
+            tcirt = parse_super_t();
+
+            eml_obj temp_cirt;
+            temp_cirt.type = super;
+            temp_cirt.data = tcirt;
+            insertArray(&result, temp_cirt);
+
             break;
         case (int)'\"': // Give control to parse_single_t()
             tst = parse_single_t(tst);
@@ -164,7 +169,7 @@ static void parse() {
 
 // Starts on "{" of header, ends on char succeeding "}"
 static void parse_header() {
-    header_t tht = empty_header_t;
+    eml_header_t tht = empty_header_t;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -191,7 +196,7 @@ static void parse_header() {
     }
 }
 
-static void parse_header_t(header_t* tht) {
+static void parse_header_t(eml_header_t* tht) {
     bool header_header_t_pv = false; // Toggle between parameter & value
 
     while (current_postition < emlstringlen) {
@@ -223,9 +228,9 @@ static void parse_header_t(header_t* tht) {
 }
 
 // Starts on 's' of super. Ends on ')'.
-static super_t *parse_super_t() {
-    super_t *tsupt = NULL; // Will be allocated just in time
-    single_t *tst = NULL;
+static eml_super_t *parse_super_t() {
+    eml_super_t *tsupt = NULL; // Will be allocated just in time
+    eml_single_t *tst = NULL;
 
     Array dynamicSets; // janky, I don't like this
 
@@ -258,7 +263,7 @@ static super_t *parse_super_t() {
                 // }
 
                 // pass back tsupt
-                tsupt = calloc(1, sizeof(int) + sizeof(single_t) * dynamicSets.used);
+                tsupt = calloc(1, sizeof(int) + sizeof(eml_single_t) * dynamicSets.used);
                 if (tsupt == NULL) {
                     for (int i = 0; i < dynamicSets.used; i++) {
                         free(dynamicSets.array[i].data);
@@ -269,7 +274,7 @@ static super_t *parse_super_t() {
                 }
                 tsupt->count = dynamicSets.used;
                 for (int i = 0; i < dynamicSets.used; i++) {
-                    tsupt->sets[i] = ((single_t*) dynamicSets.array[i].data);
+                    tsupt->sets[i] = ((eml_single_t*) dynamicSets.array[i].data);
                 }
                 freeArray(&dynamicSets);
 
@@ -287,7 +292,7 @@ static super_t *parse_super_t() {
 }
 
 // Frees up memory and stops execution of parse_single_t if *p is NULL
-static void cond_bail_parse_single_t(void *p, single_t *tst) {
+static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
     if (p == NULL) {
         free_single_t(tst);
         free_results();
@@ -297,15 +302,15 @@ static void cond_bail_parse_single_t(void *p, single_t *tst) {
 
 // Starts on NAME ('"'), ends on ';'
 // Can not return NULL
-static single_t *parse_single_t() {
-    single_t *tst = calloc(1, sizeof(single_t));
+static eml_single_t *parse_single_t() {
+    eml_single_t *tst = calloc(1, sizeof(eml_single_t));
     if (tst == NULL) {
         free_results();
         exit(1);
     }
 
-    kind_flag kind = none;
-    modifier_flag modifier = no_mod; 
+    eml_kind_flag kind = none;
+    eml_modifier_flag modifier = no_mod; 
     bool body_single_t_nw = false; // Toggle between name & work
     int body_standard_varied_vcount = 0;  // Index of standard_varied_k.vReps[]
     bool is_asymetric = false;
@@ -371,25 +376,25 @@ static single_t *parse_single_t() {
 
                 // Upgrade to asymetric
 
-                tst->asymetric_work = malloc(sizeof(asymetric_k));
-                cond_bail_parse_single_t(tst->asymetric_work, tst);
-                tst->asymetric_work->left_none_k = NULL;
-                tst->asymetric_work->left_standard_k = NULL;
-                tst->asymetric_work->left_standard_varied_k = NULL;
-                tst->asymetric_work->right_none_k = NULL;
-                tst->asymetric_work->right_standard_k = NULL;
-                tst->asymetric_work->right_standard_varied_k = NULL;
+                tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
+                cond_bail_parse_single_t(tst->asymmetric_work, tst);
+                tst->asymmetric_work->left_none_k = NULL;
+                tst->asymmetric_work->left_standard_k = NULL;
+                tst->asymmetric_work->left_standard_varied_k = NULL;
+                tst->asymmetric_work->right_none_k = NULL;
+                tst->asymmetric_work->right_standard_k = NULL;
+                tst->asymmetric_work->right_standard_varied_k = NULL;
 
                 if (tst->no_work != NULL) {
-                    tst->asymetric_work->left_none_k = tst->no_work;
+                    tst->asymmetric_work->left_none_k = tst->no_work;
                     tst->no_work = NULL;
                 }
                 else if (tst->standard_work != NULL) {
-                    tst->asymetric_work->left_standard_k = tst->standard_work;
+                    tst->asymmetric_work->left_standard_k = tst->standard_work;
                     tst->standard_work = NULL;
                 }
                 else if (tst->standard_varied_work != NULL) {
-                    tst->asymetric_work->left_standard_varied_k = tst->standard_varied_work;
+                    tst->asymmetric_work->left_standard_varied_k = tst->standard_varied_work;
                     tst->standard_varied_work = NULL;
                 }
             }
@@ -398,7 +403,7 @@ static single_t *parse_single_t() {
             ++current_postition;
             break;
         case (int)'x':
-            tst->standard_work = malloc(sizeof(standard_k));
+            tst->standard_work = malloc(sizeof(eml_standard_k));
             cond_bail_parse_single_t(tst->standard_work, tst);
             tst->standard_work->sets = buffer_int;
             tst->standard_work->reps.weight = -1;
@@ -590,15 +595,15 @@ static single_t *parse_single_t() {
 
             if (is_asymetric == true) {
                 if (tst->no_work != NULL) {
-                    tst->asymetric_work->right_none_k = tst->no_work;
+                    tst->asymmetric_work->right_none_k = tst->no_work;
                     tst->no_work = NULL;
                 }
                 else if (tst->standard_work != NULL) {
-                    tst->asymetric_work->right_standard_k = tst->standard_work;
+                    tst->asymmetric_work->right_standard_k = tst->standard_work;
                     tst->standard_work = NULL;
                 }
                 else if (tst->standard_varied_work != NULL) {
-                    tst->asymetric_work->right_standard_varied_k = tst->standard_varied_work;
+                    tst->asymmetric_work->right_standard_varied_k = tst->standard_varied_work;
                     tst->standard_varied_work = NULL;
                 }
             }
@@ -633,7 +638,7 @@ static single_t *parse_single_t() {
     return NULL; // should never execute under normal conditions
 }
 
-static void validate_header_t(header_t *h) {
+static void validate_header_t(eml_header_t *h) {
 
     // printf("parameter: %s, value: %s\n", h->parameter, h->value);
 
@@ -658,8 +663,8 @@ static void rolling_int(char new_char, int *dest) {
     return;
 }
 
-static void print_standard_k(standard_k *k) {
-    reps reps = k->reps;
+static void print_standard_k(eml_standard_k *k) {
+    eml_reps reps = k->reps;
 
     if (reps.isTime) {
     printf("%i time sets ", k->sets);
@@ -689,14 +694,14 @@ static void print_standard_k(standard_k *k) {
     printf("\n");
 }
 
-static void print_standard_varied_k(standard_varied_k *k) {
+static void print_standard_varied_k(eml_standard_varied_k *k) {
     int count = k->sets;
     printf("%i sets\n", count);
     for (int i = 0; i < count; i++) {
         printf(" - ");
 
         // standard_varied_k emulates standard_k for printing
-        standard_k shim = empty_standard_k;
+        eml_standard_k shim = empty_standard_k;
         shim.sets = k->sets;
         shim.reps = k->vReps[i];
         print_standard_k(&shim);
@@ -704,7 +709,7 @@ static void print_standard_varied_k(standard_varied_k *k) {
     }
 }
 
-static void print_single_t(single_t *s) {
+static void print_single_t(eml_single_t *s) {
     printf("--- Printing single_t ---\n");
     printf("Name: %s\n", s->name);
 
@@ -716,32 +721,32 @@ static void print_single_t(single_t *s) {
     } else if (s->standard_varied_work != NULL) {
         printf("Standard varied work\n");
         print_standard_varied_k(s->standard_varied_work);
-    } else if (s->asymetric_work != NULL) {
+    } else if (s->asymmetric_work != NULL) {
         printf("Asymetric work\n");
 
-        if (s->asymetric_work->left_none_k != NULL) {
+        if (s->asymmetric_work->left_none_k != NULL) {
             printf("LEFT: No work\n");
-        } else if (s->asymetric_work->left_standard_k != NULL) {
+        } else if (s->asymmetric_work->left_standard_k != NULL) {
             printf("LEFT: Standard work ");
-            print_standard_k(s->asymetric_work->left_standard_k);
-        } else if (s->asymetric_work->left_standard_varied_k != NULL) {
+            print_standard_k(s->asymmetric_work->left_standard_k);
+        } else if (s->asymmetric_work->left_standard_varied_k != NULL) {
             printf("LEFT: Standard varied work ");
-            print_standard_varied_k(s->asymetric_work->left_standard_varied_k);
+            print_standard_varied_k(s->asymmetric_work->left_standard_varied_k);
         }
 
-        if (s->asymetric_work->right_none_k != NULL) {
+        if (s->asymmetric_work->right_none_k != NULL) {
             printf("RIGHT: No work\n");
-        } else if (s->asymetric_work->right_standard_k != NULL) {
+        } else if (s->asymmetric_work->right_standard_k != NULL) {
             printf("RIGHT: Standard work ");
-            print_standard_k(s->asymetric_work->right_standard_k);
-        } else if (s->asymetric_work->right_standard_varied_k != NULL) {
+            print_standard_k(s->asymmetric_work->right_standard_k);
+        } else if (s->asymmetric_work->right_standard_varied_k != NULL) {
             printf("RIGHT: Standard varied work ");
-            print_standard_varied_k(s->asymetric_work->right_standard_varied_k);
+            print_standard_varied_k(s->asymmetric_work->right_standard_varied_k);
         }
     }
 }
 
-static void print_super_t(super_t *s) {
+static void print_super_t(eml_super_t *s) {
     printf("-------------------- Super --------------------\n");
     for (int i = 0; i < s->count; i++) {
         print_single_t(s->sets[i]);
@@ -752,13 +757,13 @@ static void print_super_t(super_t *s) {
 
 static void print_emlobj(eml_obj *e) {
     if (e->type == single) {
-        print_single_t((single_t*) e->data);
+        print_single_t((eml_single_t*) e->data);
     } else {
-        print_super_t((super_t*) e->data);
+        print_super_t((eml_super_t*) e->data);
     }
 }
 
-static void free_single_t(single_t *s) {
+static void free_single_t(eml_single_t *s) {
     if (s->no_work != NULL) {
         free(s->no_work);
     }
@@ -771,38 +776,38 @@ static void free_single_t(single_t *s) {
         free(s->standard_varied_work);
     }
 
-    if (s->asymetric_work != NULL) {
-        if (s->asymetric_work->left_none_k != NULL) {
-            free(s->asymetric_work->left_none_k);
+    if (s->asymmetric_work != NULL) {
+        if (s->asymmetric_work->left_none_k != NULL) {
+            free(s->asymmetric_work->left_none_k);
         }
 
-        if (s->asymetric_work->left_standard_k != NULL) {
-            free(s->asymetric_work->left_standard_k);
+        if (s->asymmetric_work->left_standard_k != NULL) {
+            free(s->asymmetric_work->left_standard_k);
         }
 
-        if (s->asymetric_work->left_standard_varied_k != NULL) {
-            free(s->asymetric_work->left_standard_varied_k);
+        if (s->asymmetric_work->left_standard_varied_k != NULL) {
+            free(s->asymmetric_work->left_standard_varied_k);
         }
 
-        if (s->asymetric_work->right_none_k != NULL) {
-            free(s->asymetric_work->right_none_k);
+        if (s->asymmetric_work->right_none_k != NULL) {
+            free(s->asymmetric_work->right_none_k);
         }
 
-        if (s->asymetric_work->right_standard_k != NULL) {
-            free(s->asymetric_work->right_standard_k);
+        if (s->asymmetric_work->right_standard_k != NULL) {
+            free(s->asymmetric_work->right_standard_k);
         }
 
-        if (s->asymetric_work->right_standard_varied_k != NULL) {
-            free(s->asymetric_work->right_standard_varied_k);
+        if (s->asymmetric_work->right_standard_varied_k != NULL) {
+            free(s->asymmetric_work->right_standard_varied_k);
         }
 
-        free(s->asymetric_work);
+        free(s->asymmetric_work);
     }
 
     free(s);
 }
 
-static void free_super_t(super_t *s) {
+static void free_super_t(eml_super_t *s) {
     for(int i = 0; i < s->count; i++) {
         free_single_t(s->sets[i]);
     }
@@ -812,9 +817,9 @@ static void free_super_t(super_t *s) {
 
 static void free_emlobj(eml_obj *e) {
     if (e->type == single) {
-        free_single_t((single_t*) e->data);
+        free_single_t((eml_single_t*) e->data);
     } else {
-        free_super_t((super_t*) e->data);
+        free_super_t((eml_super_t*) e->data);
     }
 
     // free(e); not a pointer to dynamic memory
