@@ -140,7 +140,7 @@ static void parse() {
             tcirt = parse_super_t();
 
             eml_obj temp_cirt;
-            temp_cirt.type = super;
+            temp_cirt.type = circuit;
             temp_cirt.data = tcirt;
             insertArray(&result, temp_cirt);
 
