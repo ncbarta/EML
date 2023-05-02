@@ -390,7 +390,7 @@ static void moveToAsymmetric(eml_single_t *tst, bool side) {
     }
     else if (tst->standard_work != NULL) {
         if (side) {
-            tst->asymmetric_work->right_none_k = tst->standard_work;
+            tst->asymmetric_work->right_standard_k = tst->standard_work;
         } else {
             tst->asymmetric_work->left_standard_k = tst->standard_work;
         }
@@ -450,8 +450,6 @@ static void upgradeToStandard(eml_single_t *tst) {
     tst->standard_work->reps.mod = no_mod;
     return;
 }
-
-
 
 // Starts on NAME ('"'), ends on ';'
 // Can not return NULL
