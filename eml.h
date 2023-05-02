@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-typedef unsigned int bool;
+typedef uint32_t bool;
 
 // EML Number is an unsigned 32b fixed-point number
 // msb is reserved to "shift" decimal point by 2 places, meaning
