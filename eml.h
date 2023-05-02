@@ -1,5 +1,11 @@
-// Utility
-typedef int bool;
+#include <stdint.h>
+
+typedef unsigned int bool;
+
+// EML Number is an unsigned 32b fixed-point number
+// msb is reserved to "shift" decimal point by 2 places, meaning
+// we can store numbers from [0, 21,474,835.00]
+typedef uint32_t eml_number;
 
 // Parser flag types
 typedef enum WorkKindFlag { none, standard, standard_varied } eml_kind_flag; // asymetric not included since it is technically 2. Also you wouldn't attach a modifier to asymetric, just it's components
@@ -13,10 +19,21 @@ typedef struct HeaderToken {
 
 // Modifier
 typedef struct Reps {
-    int value;   // Count, or duration
-    bool isTime; // is time rep
-    int weight;  // default -1, mutually exclusive with rpe
-    int rpe;     // default -1, mutually exclusive with weight
+    eml_number value;
+
+    union Modifier {
+        eml_number weight;
+        eml_number rpe;
+    } modifier;
+
+    // Decided against bitfields because of portability concerns
+    uint8_t isTime;     // Reps defined by time
+    uint8_t toFailure;  // Reps complete upon failure
+    uint8_t mod;        // Which modifier (if any) is being applied to reps
+                        // 0: No modifier
+                        // 1: Weight
+                        // 2: RPE
+                        // 3-7: Reserved
 } eml_reps;
 
 // EML Work (kind)
@@ -25,11 +42,11 @@ typedef bool eml_none_k;
 
 typedef struct Standard {
     eml_reps reps;
-    int sets;
+    uint32_t sets;
 } eml_standard_k;
 
 typedef struct StandardVaried {
-    int sets;
+    uint32_t sets;
     eml_reps vReps[];
 } eml_standard_varied_k;
 
@@ -53,7 +70,7 @@ typedef struct Single {
 } eml_single_t;
 
 typedef struct Superset {
-    int count;
+    uint32_t count;
     eml_single_t *sets[];
 } eml_super_t;
 
@@ -66,13 +83,3 @@ typedef struct EMLObj {
     eml_objtype type;
     void        *data;
 } eml_obj;
-
-// NOTES/TODO:
-// apparently "_t" is reserved for POSIX - change later.
-// Descriptive error handling
-// - EX: printf("Too many variable reps\n"); -> You have 6 variable reps [...], but only designate 5 sets.
-// Edge case '))' to close varied set & super at the same time - might just remove this feature or patch it up during error handling. Whichever's easier.
-// - Also doccument this bc it's not on the spec
-// Make an interface. 
-// EML may be a bit of a misnomer. It has properties of a markup language. but it actually might fall into the category of meta-language better.
-// Update spec now that I know more about the implementation

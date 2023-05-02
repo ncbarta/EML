@@ -23,7 +23,7 @@ static const struct Single empty_single_t;
 static const struct Superset empty_super_t;
 
 static void validate_header_t(eml_header_t *h);
-static void rolling_int(char new_char, int *dest);
+static void rolling_int(char new_char, eml_number *dest);
 
 static void parse();
 static void parse_header();
@@ -55,7 +55,7 @@ static void freeArray(Array *a);
 static Array result;
 
 int main(int argc, char *argv[]){
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
@@ -71,8 +71,6 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":4x(4,3@30,2,1)@120;"; // standard varied inner modifier & macro
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3@60:5xF@60;"; // asymetrical standard with modifiers
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3@30,2,1)@120:3x(F,F,F)@550;"; // asymetrical mixed
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":;"; // none
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\"::;"; // asymetric none
 
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x60T@30;"; // standard + time + weight
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":4x(40T,30T@550,20T,10T)@120;"; // standard varied + time + weight
@@ -85,7 +83,7 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
 
     // Superset/Circuit
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
     emlstringlen = strlen(emlstring);
 
     printf("EML String: %s, length: %i\n", emlstring, emlstringlen);
@@ -300,6 +298,83 @@ static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
     }
 }
 
+// Writes buffer_int to the appropriate field, whether it be reps.value, or a modifier.
+// if `vcount` is defined and there is a modifier to be applied, flush will write to 
+// the specified vReps[vcount], otherwise, it will apply `buf` as a macro.
+static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf) {
+    switch (kind) {
+        case none:
+            switch (mod) {
+                case no_mod:
+                    tst->no_work = malloc(sizeof(int));
+                    cond_bail_parse_single_t(tst->no_work, tst);
+                    break;
+                default:
+                    printf("You cannot add a modifier to none work");
+                    free(tst);
+                    free_results();
+                    exit(1);
+            }
+            break;
+        case standard:
+            switch (mod) {
+                case no_mod:
+                    tst->standard_work->reps.value = *buf; 
+                    break;
+                case weight_mod:
+                    tst->standard_work->reps.mod = weight_mod;
+                    tst->standard_work->reps.modifier.weight = *buf; 
+                    break;
+                case rpe_mod:
+                    tst->standard_work->reps.mod = rpe_mod;
+                    tst->standard_work->reps.modifier.rpe = *buf;
+                    break;
+            }
+            break;
+        case standard_varied:
+            if (vcount == NULL) { // MACRO MODIFIER
+                switch (mod) {
+                    case no_mod:
+                        break;
+                    case weight_mod:
+                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+                            if (tst->standard_varied_work->vReps[i].mod == no_mod) {
+                                tst->standard_varied_work->vReps[i].mod = weight_mod;
+                                tst->standard_varied_work->vReps[i].modifier.weight = *buf;
+                            }
+                        }
+                        break;
+                    case rpe_mod:
+                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+                            if (tst->standard_varied_work->vReps[i].mod == no_mod) {
+                                tst->standard_varied_work->vReps[i].mod = rpe_mod;
+                                tst->standard_varied_work->vReps[i].modifier.rpe = *buf;
+                            }
+                        }
+                        break;
+                }
+            } else { // INNER-MODIFIER
+                switch (mod) {
+                    case no_mod:
+                        tst->standard_varied_work->vReps[*vcount].value = *buf;
+                        break;
+                    case weight_mod:
+                        tst->standard_varied_work->vReps[*vcount].mod = weight_mod;
+                        tst->standard_varied_work->vReps[*vcount].modifier.weight = *buf;
+                        break;
+                    case rpe_mod:
+                        tst->standard_varied_work->vReps[*vcount].mod = rpe_mod;
+                        tst->standard_varied_work->vReps[*vcount].modifier.rpe = *buf;
+                        break;
+                }
+            }
+            break;
+    }
+
+    *buf = 0;
+    return;
+}
+
 // Starts on NAME ('"'), ends on ';'
 // Can not return NULL
 static eml_single_t *parse_single_t() {
@@ -312,10 +387,10 @@ static eml_single_t *parse_single_t() {
     eml_kind_flag kind = none;
     eml_modifier_flag modifier = no_mod; 
     bool body_single_t_nw = false; // Toggle between name & work
-    int body_standard_varied_vcount = 0;  // Index of standard_varied_k.vReps[]
+    uint32_t body_standard_varied_vcount = 0;  // Index of standard_varied_k.vReps[]
     bool is_asymetric = false;
 
-    int buffer_int = -1; // default -1: AKA 'F' or 'no weight/rpe'
+    eml_number buffer_int = 0;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -327,56 +402,15 @@ static eml_single_t *parse_single_t() {
         case (int)':':
             // Upgrade to asymetric_k
             if (body_single_t_nw == true) {
-                switch (kind) {
-                case none:
-                    tst->no_work = malloc(sizeof(int));
-                    cond_bail_parse_single_t(tst->no_work, tst);
-                    break;
-                case standard:
-                    switch (modifier) {
-                    case no_mod:
-                        tst->standard_work->reps.value = buffer_int;
-                        break;
-                    case weight_mod:
-                        tst->standard_work->reps.weight = buffer_int;
-                        break;
-                    case rpe_mod:
-                        tst->standard_work->reps.rpe = buffer_int;
-                        break;
-                    }
-
-                    modifier = no_mod;
-                case standard_varied:
-                    switch (modifier) {
-                    case no_mod:
-                        break;
-                    case weight_mod:
-                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                            if (tst->standard_varied_work->vReps[i].weight == -1 && tst->standard_varied_work->vReps[i].rpe == -1) {
-                                tst->standard_varied_work->vReps[i].weight = buffer_int; // Override non-set weight
-                            }
-                        }
-                        break;
-                    case rpe_mod:
-                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                            if (tst->standard_varied_work->vReps[i].rpe == -1 && tst->standard_varied_work->vReps[i].weight == -1) {
-                                tst->standard_varied_work->vReps[i].rpe = buffer_int; // Override non-set rpe
-                            }
-                        }
-                        break;
-                    }
-                    break;
-                }
+                flush(tst, NULL, kind, modifier, &buffer_int);
 
                 modifier = no_mod;
-                buffer_int = -1;
-
                 is_asymetric = true;
                 kind = none;
 
                 // Upgrade to asymetric
 
-                tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
+                tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k)); // Pull this out into it's own function
                 cond_bail_parse_single_t(tst->asymmetric_work, tst);
                 tst->asymmetric_work->left_none_k = NULL;
                 tst->asymmetric_work->left_standard_k = NULL;
@@ -405,25 +439,26 @@ static eml_single_t *parse_single_t() {
         case (int)'x':
             tst->standard_work = malloc(sizeof(eml_standard_k));
             cond_bail_parse_single_t(tst->standard_work, tst);
-            tst->standard_work->sets = buffer_int;
-            tst->standard_work->reps.weight = -1;
-            tst->standard_work->reps.rpe = -1;
+            tst->standard_work->sets = buffer_int; // UN-COND flush buffer_int
             tst->standard_work->reps.isTime = false;
-            buffer_int = -1;
+            tst->standard_work->reps.toFailure = false;
+            tst->standard_work->reps.mod = no_mod;
+            buffer_int = 0;
+            kind = standard;
             ++current_postition;
             break;
         case (int)'(':
             // Upgrade standard_kind to standard_varied_kind
-            tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(int));
+            tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(eml_number)); // Pull this out to it's own function.
             cond_bail_parse_single_t(tst->standard_varied_work, tst);
             
             tst->standard_varied_work->sets = tst->standard_work->sets;
 
             // standard_varied_kind defaults
             for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                tst->standard_varied_work->vReps[i].weight = -1;
-                tst->standard_varied_work->vReps[i].rpe = -1;
                 tst->standard_varied_work->vReps[i].isTime = false;
+                tst->standard_varied_work->vReps[i].toFailure = false;
+                tst->standard_varied_work->vReps[i].mod = no_mod;
             }
 
             body_standard_varied_vcount = 0;
@@ -440,20 +475,9 @@ static eml_single_t *parse_single_t() {
                 exit(1);
             }
 
-            switch (modifier) {
-            case no_mod:
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
-                break;
-            case weight_mod:
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = buffer_int;
-                break;
-            case rpe_mod:
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = buffer_int;
-                break;
-            }
+            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int);
 
             modifier = no_mod;
-            buffer_int = -1;
             body_standard_varied_vcount++;
             ++current_postition;
             break;
@@ -463,21 +487,9 @@ static eml_single_t *parse_single_t() {
                 exit(1);
             }
 
-            switch (modifier) {
-            case no_mod:
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
-                break;
-            case weight_mod:
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].weight = buffer_int;
-                break;
-            case rpe_mod:
-                tst->standard_varied_work->vReps[body_standard_varied_vcount].rpe = buffer_int;
-                break;
-            }
+            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int);
 
             modifier = no_mod;
-
-            buffer_int = -1;
             body_standard_varied_vcount++;
 
             if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
@@ -486,112 +498,88 @@ static eml_single_t *parse_single_t() {
             }
             ++current_postition;
             break;
+        case (int)'F':
+            switch (kind) {
+                case none:
+                    printf("You cannot make no work to failure");
+                    exit(1);
+                case standard:
+                    tst->standard_work->reps.toFailure = true;
+                    break;
+                case standard_varied:
+                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[body_standard_varied_vcount].toFailure = true;
+                    }
+                    else {
+                        printf("You cannot use 'to failure' as a macro");
+                        exit(1);
+                    }
+                    break;
+            }
+            ++current_postition;
+            break;
         case (int)'T':
             switch (kind) {
-            case none:
-                printf("You cannot add a modifier to none work");
-                exit(1);
-                break;
-            case standard:
-                tst->standard_work->reps.isTime = true;
-                break;
-            case standard_varied:
-                if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                    tst->standard_varied_work->vReps[body_standard_varied_vcount].isTime = true;
-                }
-                else {
-                    printf("You cannot attach time as a macro");
+                case none:
+                    printf("You cannot add a modifier to none work");
                     exit(1);
-                }
-                break;
+                case standard:
+                    tst->standard_work->reps.isTime = true;
+                    break;
+                case standard_varied:
+                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[body_standard_varied_vcount].isTime = true;
+                    }
+                    else {
+                        printf("You cannot attach time as a macro");
+                        exit(1);
+                    }
+                    break;
             }
             ++current_postition;
             break;
         case (int)'@':
             switch (kind) {
-            case none:
-                printf("You cannot add a modifier to none work");
-                exit(1);
-                break;
-            case standard:
-                tst->standard_work->reps.value = buffer_int;
-                modifier = weight_mod;
-                break;
-            case standard_varied:
-                // check if attaching inner modifier (EX: 3x(5@120,...,...))
-                if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                    tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
-                }
-                modifier = weight_mod;
-                break;
+                case none:
+                    printf("You cannot add a modifier to none work");
+                    exit(1);
+                case standard:
+                    tst->standard_work->reps.value = buffer_int;
+                    break;
+                case standard_varied:
+                    // check if attaching inner modifier (EX: 3x(5@120,...,...))
+                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
+                    }
+                    break;
             }
 
-            buffer_int = -1;
+            modifier = weight_mod;
+            buffer_int = 0;
             ++current_postition;
             break;
         case (int)'%':
             switch (kind) {
-            case none:
-                printf("You cannot add a modifier to none work");
-                exit(1);
-                break;
-            case standard:
-                tst->standard_work->reps.value = buffer_int;
-                modifier = rpe_mod;
-                break;
-            case standard_varied:
-                if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                    tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
-                }
-                modifier = rpe_mod;
-                break;
+                case none:
+                    printf("You cannot add a modifier to none work");
+                    exit(1);
+                case standard:
+                    tst->standard_work->reps.value = buffer_int; // COND flush buffer_int
+                    break;
+                case standard_varied:
+                    // check if attaching inner modifier (EX: 3x(5%120,...,...))
+                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
+                    }
+                    break;
             }
 
-            buffer_int = -1;
+            modifier = rpe_mod;
+            buffer_int = 0;
             ++current_postition;
             break;
         case (int)';':
-            switch (kind) {
-            case none:
-                tst->no_work = malloc(sizeof(int));
-                cond_bail_parse_single_t(tst->no_work, tst);
-                break;
-            case standard:
-                switch (modifier) {
-                case no_mod:
-                    tst->standard_work->reps.value = buffer_int;
-                    break;
-                case weight_mod:
-                    tst->standard_work->reps.weight = buffer_int;
-                    break;
-                case rpe_mod:
-                    tst->standard_work->reps.rpe = buffer_int;
-                    break;
-                }
-
-                break;
-            case standard_varied:
-                switch (modifier) {
-                case no_mod:
-                    break;
-                case weight_mod:
-                    for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                        if (tst->standard_varied_work->vReps[i].weight == -1 && tst->standard_varied_work->vReps[i].rpe == -1) {
-                            tst->standard_varied_work->vReps[i].weight = buffer_int; // Override non-set weight
-                        }
-                    }
-                    break;
-                case rpe_mod:
-                    for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                        if (tst->standard_varied_work->vReps[i].rpe == -1 && tst->standard_varied_work->vReps[i].weight == -1) {
-                            tst->standard_varied_work->vReps[i].rpe = buffer_int; // Override non-set rpe
-                        }
-                    }
-                    break;
-                }
-
-                break;
-            }
+            flush(tst, NULL, kind, modifier, &buffer_int);
 
             if (is_asymetric == true) {
                 if (tst->no_work != NULL) {
@@ -608,24 +596,13 @@ static eml_single_t *parse_single_t() {
                 }
             }
 
-            buffer_int = -1;
-
             return tst; // Give control back
         default:
             if (body_single_t_nw == false) {
                 strncat(tst->name, &current, 1);
             }
             else {
-                if (kind == none) {
-                    kind = standard;
-                }
-
-                if (current == (int)'F') {
-                    buffer_int = -1;
-                }
-                else {
-                    rolling_int(current, &buffer_int);
-                }
+                rolling_int(current, &buffer_int);
             }
             ++current_postition;
             break;
@@ -640,8 +617,6 @@ static eml_single_t *parse_single_t() {
 
 static void validate_header_t(eml_header_t *h) {
 
-    // printf("parameter: %s, value: %s\n", h->parameter, h->value);
-
     if (strcmp(h->parameter, "version") == 0) {
         strcpy(version, h->value);
     }
@@ -654,11 +629,8 @@ static void validate_header_t(eml_header_t *h) {
 }
 
 // Creates an integer character by character left to right
-static void rolling_int(char new_char, int *dest) {
-    if (*dest == -1) {
-        *dest = 0;
-    }
-
+static void rolling_int(char new_char, eml_number *dest) {
+    // TODO: Implement fixed-point
     *dest = (*dest) * 10 + (int)new_char - '0';
     return;
 }
@@ -667,9 +639,9 @@ static void print_standard_k(eml_standard_k *k) {
     eml_reps reps = k->reps;
 
     if (reps.isTime) {
-    printf("%i time sets ", k->sets);
+        printf("%i time sets ", k->sets);
 
-        if (reps.value == -1) {
+        if (reps.toFailure) {
             printf("to failure ");
         } else {
             printf("of %i seconds ", reps.value);
@@ -677,18 +649,22 @@ static void print_standard_k(eml_standard_k *k) {
     } else {
         printf("%i sets ", k->sets);
 
-        if (reps.value == -1) {
+        if (reps.toFailure) {
             printf("to failure ");
         } else {
             printf("of %i reps ", reps.value);
         }
     }
 
-    if (reps.weight != -1) {
-        printf("with %i %s", reps.weight, weight);
-    }
-    if (reps.rpe != -1) {
-        printf("with RPE of %i", reps.rpe);
+    switch (reps.mod) {
+        case no_mod:
+            break;
+        case weight_mod:
+            printf("with %i %s", reps.modifier.weight, weight);
+            break;
+        case rpe_mod:
+            printf("with RPE of %i", reps.modifier.rpe);
+            break;
     }
 
     printf("\n");
@@ -704,8 +680,7 @@ static void print_standard_varied_k(eml_standard_varied_k *k) {
         eml_standard_k shim = empty_standard_k;
         shim.sets = k->sets;
         shim.reps = k->vReps[i];
-        print_standard_k(&shim);
-        printf("\n");
+        print_standard_k(&shim); // FIXME: Prints X sets of ... on every line
     }
 }
 
