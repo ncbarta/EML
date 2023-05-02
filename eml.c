@@ -375,6 +375,48 @@ static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_m
     return;
 }
 
+static void upgradeToAsymmetric(eml_single_t *tst) {
+    tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k)); // Pull this out into it's own function
+    cond_bail_parse_single_t(tst->asymmetric_work, tst);
+
+    tst->asymmetric_work->left_none_k = NULL;
+    tst->asymmetric_work->left_standard_k = NULL;
+    tst->asymmetric_work->left_standard_varied_k = NULL;
+    tst->asymmetric_work->right_none_k = NULL;
+    tst->asymmetric_work->right_standard_k = NULL;
+    tst->asymmetric_work->right_standard_varied_k = NULL;
+
+    if (tst->no_work != NULL) {
+        tst->asymmetric_work->left_none_k = tst->no_work;
+        tst->no_work = NULL;
+    }
+    else if (tst->standard_work != NULL) {
+        tst->asymmetric_work->left_standard_k = tst->standard_work;
+        tst->standard_work = NULL;
+    }
+    else if (tst->standard_varied_work != NULL) {
+        tst->asymmetric_work->left_standard_varied_k = tst->standard_varied_work;
+        tst->standard_varied_work = NULL;
+    }
+}
+
+static void upgradeToStandardVaried(eml_single_t *tst) {
+    tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(eml_number)); // Pull this out to it's own function.
+    cond_bail_parse_single_t(tst->standard_varied_work, tst);
+    
+    tst->standard_varied_work->sets = tst->standard_work->sets;
+
+    // standard_varied_kind defaults
+    for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+        tst->standard_varied_work->vReps[i].isTime = false;
+        tst->standard_varied_work->vReps[i].toFailure = false;
+        tst->standard_varied_work->vReps[i].mod = no_mod;
+    }
+
+    free(tst->standard_work);
+    tst->standard_work = NULL;
+}
+
 // Starts on NAME ('"'), ends on ';'
 // Can not return NULL
 static eml_single_t *parse_single_t() {
@@ -408,33 +450,12 @@ static eml_single_t *parse_single_t() {
                 is_asymetric = true;
                 kind = none;
 
-                // Upgrade to asymetric
-
-                tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k)); // Pull this out into it's own function
-                cond_bail_parse_single_t(tst->asymmetric_work, tst);
-                tst->asymmetric_work->left_none_k = NULL;
-                tst->asymmetric_work->left_standard_k = NULL;
-                tst->asymmetric_work->left_standard_varied_k = NULL;
-                tst->asymmetric_work->right_none_k = NULL;
-                tst->asymmetric_work->right_standard_k = NULL;
-                tst->asymmetric_work->right_standard_varied_k = NULL;
-
-                if (tst->no_work != NULL) {
-                    tst->asymmetric_work->left_none_k = tst->no_work;
-                    tst->no_work = NULL;
-                }
-                else if (tst->standard_work != NULL) {
-                    tst->asymmetric_work->left_standard_k = tst->standard_work;
-                    tst->standard_work = NULL;
-                }
-                else if (tst->standard_varied_work != NULL) {
-                    tst->asymmetric_work->left_standard_varied_k = tst->standard_varied_work;
-                    tst->standard_varied_work = NULL;
-                }
+                upgradeToAsymmetric(tst);
             }
 
             body_single_t_nw = true;
             ++current_postition;
+
             break;
         case (int)'x':
             tst->standard_work = malloc(sizeof(eml_standard_k));
@@ -443,58 +464,47 @@ static eml_single_t *parse_single_t() {
             tst->standard_work->reps.isTime = false;
             tst->standard_work->reps.toFailure = false;
             tst->standard_work->reps.mod = no_mod;
+
             buffer_int = 0;
             kind = standard;
+
             ++current_postition;
             break;
         case (int)'(':
-            // Upgrade standard_kind to standard_varied_kind
-            tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(eml_number)); // Pull this out to it's own function.
-            cond_bail_parse_single_t(tst->standard_varied_work, tst);
-            
-            tst->standard_varied_work->sets = tst->standard_work->sets;
-
-            // standard_varied_kind defaults
-            for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                tst->standard_varied_work->vReps[i].isTime = false;
-                tst->standard_varied_work->vReps[i].toFailure = false;
-                tst->standard_varied_work->vReps[i].mod = no_mod;
-            }
+            upgradeToStandardVaried(tst);
 
             body_standard_varied_vcount = 0;
-
-            free(tst->standard_work);
-            tst->standard_work = NULL;
-
             kind = standard_varied;
+
             ++current_postition;
             break;
         case (int)',':
             if (body_standard_varied_vcount > tst->standard_varied_work->sets) {
                 printf("Too many variable reps\n");
-                exit(1);
+                cond_bail_parse_single_t(NULL, tst);
             }
 
             flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int);
 
-            modifier = no_mod;
             body_standard_varied_vcount++;
+            modifier = no_mod;
+
             ++current_postition;
             break;
         case (int)')':
             if (body_standard_varied_vcount > tst->standard_varied_work->sets) {
                 printf("Too many variable reps\n");
-                exit(1);
+                cond_bail_parse_single_t(NULL, tst);
             }
 
             flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int);
 
-            modifier = no_mod;
             body_standard_varied_vcount++;
+            modifier = no_mod;
 
             if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
                 printf("Too few variable reps\n");
-                exit(1);
+                cond_bail_parse_single_t(NULL, tst);
             }
             ++current_postition;
             break;
@@ -502,7 +512,7 @@ static eml_single_t *parse_single_t() {
             switch (kind) {
                 case none:
                     printf("You cannot make no work to failure");
-                    exit(1);
+                    cond_bail_parse_single_t(NULL, tst);
                 case standard:
                     tst->standard_work->reps.toFailure = true;
                     break;
@@ -512,17 +522,18 @@ static eml_single_t *parse_single_t() {
                     }
                     else {
                         printf("You cannot use 'to failure' as a macro");
-                        exit(1);
+                        cond_bail_parse_single_t(NULL, tst);
                     }
                     break;
             }
+            
             ++current_postition;
             break;
         case (int)'T':
             switch (kind) {
                 case none:
                     printf("You cannot add a modifier to none work");
-                    exit(1);
+                    cond_bail_parse_single_t(NULL, tst);
                 case standard:
                     tst->standard_work->reps.isTime = true;
                     break;
@@ -532,17 +543,18 @@ static eml_single_t *parse_single_t() {
                     }
                     else {
                         printf("You cannot attach time as a macro");
-                        exit(1);
+                        cond_bail_parse_single_t(NULL, tst);
                     }
                     break;
             }
+
             ++current_postition;
             break;
         case (int)'@':
             switch (kind) {
                 case none:
                     printf("You cannot add a modifier to none work");
-                    exit(1);
+                    cond_bail_parse_single_t(NULL, tst);
                 case standard:
                     tst->standard_work->reps.value = buffer_int;
                     break;
@@ -554,15 +566,16 @@ static eml_single_t *parse_single_t() {
                     break;
             }
 
-            modifier = weight_mod;
             buffer_int = 0;
+            modifier = weight_mod;
+            
             ++current_postition;
             break;
         case (int)'%':
             switch (kind) {
                 case none:
                     printf("You cannot add a modifier to none work");
-                    exit(1);
+                    cond_bail_parse_single_t(NULL, tst);
                 case standard:
                     tst->standard_work->reps.value = buffer_int; // COND flush buffer_int
                     break;
@@ -574,8 +587,9 @@ static eml_single_t *parse_single_t() {
                     break;
             }
 
-            modifier = rpe_mod;
             buffer_int = 0;
+            modifier = rpe_mod;
+            
             ++current_postition;
             break;
         case (int)';':
@@ -604,13 +618,14 @@ static eml_single_t *parse_single_t() {
             else {
                 rolling_int(current, &buffer_int);
             }
+
             ++current_postition;
             break;
         }
     }
 
     // Throw error here for incomplete/incorrect eml string
-    exit(1);
+    cond_bail_parse_single_t(NULL, tst);
 
     return NULL; // should never execute under normal conditions
 }
