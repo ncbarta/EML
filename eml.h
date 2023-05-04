@@ -2,10 +2,13 @@
 
 typedef uint32_t bool;
 
-// EML Number is an unsigned 32b fixed-point number
-// msb is reserved to "shift" decimal point by 2 places, meaning
-// we can store numbers from [0, 21,474,835.00]
+// EML Number is an unsigned 32b fixed-point number.
+// msb (named H for hundredths) is reserved to "shift" 
+// decimal point by 2 places, meaning we can store numbers 
+// from [0, 21,474,835.00]
 typedef uint32_t eml_number;
+const uint32_t eml_number_mask = 0x7FFFFFFF;
+const uint32_t eml_number_H = (0x1 << 31);
 
 // Parser flag types
 typedef enum WorkKindFlag { none, standard, standard_varied } eml_kind_flag; // asymetric not included since it is technically 2. Also you wouldn't attach a modifier to asymetric, just it's components

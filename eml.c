@@ -55,7 +55,7 @@ static void freeArray(Array *a);
 static Array result;
 
 int main(int argc, char *argv[]){
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
@@ -81,6 +81,10 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4%100,3,2@40000,1)@120;"; // standard varied with modifiers and macros
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
+
+    // Fractional 
+    // MAX: 21474835
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":8x7.7@21474835.0;"; // standard fractional
 
     // Superset/Circuit
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
@@ -302,7 +306,12 @@ static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
 // if `vcount` is defined and there is a modifier to be applied, flush will write to 
 // the specified vReps[vcount], otherwise, it will apply `buf` as a macro. If there is none work,
 // flush will malloc tst->no_work. flush() does not write to sets.
-static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf) {
+static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount) {
+    if (*dcount == 1) {
+        printf("There must be at least one digit following the radix point.");
+        cond_bail_parse_single_t(NULL, tst);
+    }
+
     switch (kind) {
         case none:
             switch (mod) {
@@ -312,9 +321,7 @@ static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_m
                     break;
                 default:
                     printf("You cannot add a modifier to none work");
-                    free(tst);
-                    free_results();
-                    exit(1);
+                    cond_bail_parse_single_t(NULL, tst);
             }
             break;
         case standard:
@@ -373,6 +380,7 @@ static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_m
     }
 
     *buf = 0;
+    *dcount = 0;
     return;
 }
 
@@ -467,6 +475,7 @@ static eml_single_t *parse_single_t() {
     bool is_asymetric = false;
 
     eml_number buffer_int = 0;
+    uint32_t dcount = 0;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -479,7 +488,7 @@ static eml_single_t *parse_single_t() {
             // Upgrade to asymetric_k
             if (body_single_t_nw == true) {
                 // Write value/modifier. If kind == standard_varied_work, write as macro.
-                flush(tst, NULL, kind, modifier, &buffer_int);
+                flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
 
                 modifier = no_mod;
                 is_asymetric = true;
@@ -519,7 +528,7 @@ static eml_single_t *parse_single_t() {
             }
 
             // Write reps/(internal)modifiers
-            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int);
+            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int, &dcount);
 
             body_standard_varied_vcount++;
             modifier = no_mod;
@@ -533,7 +542,7 @@ static eml_single_t *parse_single_t() {
             }
 
             // Write reps/(internal)modifiers
-            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int);
+            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int, &dcount);
 
             body_standard_varied_vcount++;
             modifier = no_mod;
@@ -605,6 +614,7 @@ static eml_single_t *parse_single_t() {
             }
 
             buffer_int = 0;
+            dcount = 0;
             modifier = weight_mod;
             
             ++current_postition;
@@ -626,13 +636,31 @@ static eml_single_t *parse_single_t() {
             }
 
             buffer_int = 0;
+            dcount = 0;
             modifier = rpe_mod;
             
             ++current_postition;
             break;
+        case (int)'.':
+            if (kind == none) {
+                printf("You cannot have fractional sets");
+                cond_bail_parse_single_t(NULL, tst);
+            }
+
+            if (dcount) {
+                printf("You cannot have multiple radix points");
+                cond_bail_parse_single_t(NULL, tst);
+            }
+
+            // Set H bit, potential overflow handled in `default`
+            buffer_int = buffer_int * 100U | eml_number_H; 
+
+            ++dcount;
+            ++current_postition;
+            break;
         case (int)';':
             // Write value/modifier. If kind == standard_varied_work, write as macro.
-            flush(tst, NULL, kind, modifier, &buffer_int);
+            flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
 
             if (is_asymetric) {
                 moveToAsymmetric(tst, 1);
@@ -644,7 +672,46 @@ static eml_single_t *parse_single_t() {
                 strncat(tst->name, &current, 1); // FIXME: Validation & NULL terminator 
             }
             else {
-                rolling_int(current, &buffer_int);
+                uint32_t temp;
+
+                switch (dcount) { // do & *condition* to exclude sets/reps.value from cases > 0. *(((kind + 1) >> 1)) & 0x1
+                    case 0: // Before radix
+                        temp = buffer_int * 10U + (unsigned int)current - '0';
+
+                        if (temp > 21474835U) { 
+                            printf("Overflow");
+                            cond_bail_parse_single_t(NULL, tst);
+                        }
+
+                        buffer_int = temp;
+                        break;
+                    case 1: // 10ths place
+                        temp = buffer_int + ((unsigned int)current - '0') * 10U;
+
+                        if ((temp & eml_number_mask) > 2147483500U) {
+                            printf("FP Overflow");
+                            cond_bail_parse_single_t(NULL, tst);
+                        }
+
+                        buffer_int = temp;
+                        dcount++;
+                        break;
+                    case 2: // 100ths place
+                        temp = buffer_int + ((unsigned int)current - '0');
+
+                        if ((temp & eml_number_mask) > 2147483500U) {
+                            printf("FP Overflow");
+                            cond_bail_parse_single_t(NULL, tst);
+                        }
+
+                        buffer_int = temp;
+                        dcount++;
+                        break;
+                    default:
+                        printf("Too many numbers right of the radix point");
+                        cond_bail_parse_single_t(NULL, tst);
+                        break;
+                }
             }
 
             ++current_postition;
@@ -671,11 +738,24 @@ static void validate_header_t(eml_header_t *h) {
     *h = empty_header_t;
 }
 
-// Creates an integer character by character left to right
-static void rolling_int(char new_char, eml_number *dest) {
-    // TODO: Implement fixed-point
-    *dest = (*dest) * 10 + (int)new_char - '0';
-    return;
+// Returns a temporary formatted eml_number string which is valid until next call.
+static char *format_eml_number(eml_number *e) {
+    static char f[12];
+
+    if (*e & eml_number_H) {
+        uint32_t masked = (*e & eml_number_mask);
+
+        sprintf(f, "%u.%u", masked / 100U, masked % 100U);
+    } else {
+        sprintf(f, "%u", *e);
+    }
+
+    if (f[11] != '\0') {
+        free_results();
+        exit(1);
+    }
+
+    return f;
 }
 
 static void print_standard_k(eml_standard_k *k) {
@@ -687,7 +767,7 @@ static void print_standard_k(eml_standard_k *k) {
         if (reps.toFailure) {
             printf("to failure ");
         } else {
-            printf("of %i seconds ", reps.value);
+            printf("of %s seconds ", format_eml_number(&reps.value));
         }
     } else {
         printf("%i sets ", k->sets);
@@ -695,7 +775,7 @@ static void print_standard_k(eml_standard_k *k) {
         if (reps.toFailure) {
             printf("to failure ");
         } else {
-            printf("of %i reps ", reps.value);
+            printf("of %s reps ", format_eml_number(&reps.value));
         }
     }
 
@@ -703,10 +783,10 @@ static void print_standard_k(eml_standard_k *k) {
         case no_mod:
             break;
         case weight_mod:
-            printf("with %i %s", reps.modifier.weight, weight);
+            printf("with %s %s", format_eml_number(&reps.modifier.weight), weight);
             break;
         case rpe_mod:
-            printf("with RPE of %i", reps.modifier.rpe);
+            printf("with RPE of %s", format_eml_number(&reps.modifier.rpe));
             break;
     }
 
