@@ -31,6 +31,13 @@ static void parse_header_t(eml_header_t* tht);
 static eml_super_t *parse_super_t();
 static eml_single_t *parse_single_t();
 
+static void cond_bail_parse_single_t(void *p, eml_single_t *tst);
+static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount);
+static void moveToAsymmetric(eml_single_t *tst, bool side);
+static void upgradeToAsymmetric(eml_single_t *tst);
+static void upgradeToStandardVaried(eml_single_t *tst);
+static void upgradeToStandard(eml_single_t *tst);
+
 static void print_standard_k(eml_standard_k *k);
 static void print_standard_varied_k(eml_standard_varied_k *k);
 static void print_single_t(eml_single_t *s);
@@ -292,172 +299,6 @@ static eml_super_t *parse_super_t() {
     exit(1);
 
     return NULL; // Should not return NULL
-}
-
-// Frees up memory and stops execution of parse_single_t if *p is NULL
-static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
-    if (p == NULL) {
-        free_single_t(tst);
-        free_results();
-        exit(1);
-    }
-}
-
-// Writes buffer_int to the appropriate field, whether it be reps.value, or a modifier.
-// if `vcount` is defined and there is a modifier to be applied, flush will write to 
-// the specified vReps[vcount], otherwise, it will apply `buf` as a macro. If there is none work,
-// flush will malloc tst->no_work. flush() does not write to sets.
-static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount) {
-    if (*dcount == 1) {
-        printf("There must be at least one digit following the radix point.");
-        cond_bail_parse_single_t(NULL, tst);
-    }
-
-    switch (kind) {
-        case none:
-            switch (mod) {
-                case no_mod:
-                    tst->no_work = malloc(sizeof(int));
-                    cond_bail_parse_single_t(tst->no_work, tst);
-                    break;
-                default:
-                    printf("You cannot add a modifier to none work");
-                    cond_bail_parse_single_t(NULL, tst);
-            }
-            break;
-        case standard:
-            switch (mod) {
-                case no_mod:
-                    tst->standard_work->reps.value = *buf; 
-                    break;
-                case weight_mod:
-                    tst->standard_work->reps.mod = weight_mod;
-                    tst->standard_work->reps.modifier.weight = *buf; 
-                    break;
-                case rpe_mod:
-                    tst->standard_work->reps.mod = rpe_mod;
-                    tst->standard_work->reps.modifier.rpe = *buf;
-                    break;
-            }
-            break;
-        case standard_varied:
-            if (vcount == NULL) { // MACRO MODIFIER
-                switch (mod) {
-                    case no_mod:
-                        break;
-                    case weight_mod:
-                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                            if (tst->standard_varied_work->vReps[i].mod == no_mod) {
-                                tst->standard_varied_work->vReps[i].mod = weight_mod;
-                                tst->standard_varied_work->vReps[i].modifier.weight = *buf;
-                            }
-                        }
-                        break;
-                    case rpe_mod:
-                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-                            if (tst->standard_varied_work->vReps[i].mod == no_mod) {
-                                tst->standard_varied_work->vReps[i].mod = rpe_mod;
-                                tst->standard_varied_work->vReps[i].modifier.rpe = *buf;
-                            }
-                        }
-                        break;
-                }
-            } else { // INNER-MODIFIER
-                switch (mod) {
-                    case no_mod:
-                        tst->standard_varied_work->vReps[*vcount].value = *buf;
-                        break;
-                    case weight_mod:
-                        tst->standard_varied_work->vReps[*vcount].mod = weight_mod;
-                        tst->standard_varied_work->vReps[*vcount].modifier.weight = *buf;
-                        break;
-                    case rpe_mod:
-                        tst->standard_varied_work->vReps[*vcount].mod = rpe_mod;
-                        tst->standard_varied_work->vReps[*vcount].modifier.rpe = *buf;
-                        break;
-                }
-            }
-            break;
-    }
-
-    *buf = 0;
-    *dcount = 0;
-    return;
-}
-
-// Moves eml_single_t->(no_work | standard_work | standard_varied_work) to the left (false) or right (true) side of asymmetric_work
-// Precondition: eml_single_t->asymmetric_work must be initialized
-static void moveToAsymmetric(eml_single_t *tst, bool side) {
-    if (tst->no_work != NULL) {
-        if (side) {
-            tst->asymmetric_work->right_none_k = tst->no_work;
-        } else {
-            tst->asymmetric_work->left_none_k = tst->no_work;
-        }
-        
-        tst->no_work = NULL;
-    }
-    else if (tst->standard_work != NULL) {
-        if (side) {
-            tst->asymmetric_work->right_standard_k = tst->standard_work;
-        } else {
-            tst->asymmetric_work->left_standard_k = tst->standard_work;
-        }
-
-        tst->standard_work = NULL;
-    }
-    else if (tst->standard_varied_work != NULL) {
-        if (side) {
-            tst->asymmetric_work->right_standard_varied_k = tst->standard_varied_work;
-        } else {
-            tst->asymmetric_work->left_standard_varied_k = tst->standard_varied_work;
-        }
-
-        tst->standard_varied_work = NULL;
-    }
-}
-
-// Allocates asymmetric & moves existing eml_single_t->(no_work | standard_work | standard_varied_work) kind to left side.
-static void upgradeToAsymmetric(eml_single_t *tst) {
-    tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
-    cond_bail_parse_single_t(tst->asymmetric_work, tst);
-
-    tst->asymmetric_work->left_none_k = NULL;
-    tst->asymmetric_work->left_standard_k = NULL;
-    tst->asymmetric_work->left_standard_varied_k = NULL;
-    tst->asymmetric_work->right_none_k = NULL;
-    tst->asymmetric_work->right_standard_k = NULL;
-    tst->asymmetric_work->right_standard_varied_k = NULL;
-
-    moveToAsymmetric(tst, 0);
-}
-
-// Allocates standard_varied_work & transitions existing eml_single_t->standard_work.
-static void upgradeToStandardVaried(eml_single_t *tst) {
-    tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(eml_number));
-    cond_bail_parse_single_t(tst->standard_varied_work, tst);
-    
-    tst->standard_varied_work->sets = tst->standard_work->sets;
-
-    // standard_varied_kind defaults
-    for (int i = 0; i < tst->standard_varied_work->sets; i++) {
-        tst->standard_varied_work->vReps[i].isTime = false;
-        tst->standard_varied_work->vReps[i].toFailure = false;
-        tst->standard_varied_work->vReps[i].mod = no_mod;
-    }
-
-    free(tst->standard_work);
-    tst->standard_work = NULL;
-}
-
-// Allocates standard_work
-static void upgradeToStandard(eml_single_t *tst) {
-    tst->standard_work = malloc(sizeof(eml_standard_k));
-    cond_bail_parse_single_t(tst->standard_work, tst);
-    tst->standard_work->reps.isTime = false;
-    tst->standard_work->reps.toFailure = false;
-    tst->standard_work->reps.mod = no_mod;
-    return;
 }
 
 // Starts on NAME ('"'), ends on ';'
@@ -732,7 +573,6 @@ static eml_single_t *parse_single_t() {
 }
 
 static void validate_header_t(eml_header_t *h) {
-
     if (strcmp(h->parameter, "version") == 0) {
         strcpy(version, h->value);
     }
@@ -742,6 +582,172 @@ static void validate_header_t(eml_header_t *h) {
     }
 
     *h = empty_header_t;
+}
+
+// Frees up memory and stops execution of parse_single_t if *p is NULL
+static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
+    if (p == NULL) {
+        free_single_t(tst);
+        free_results();
+        exit(1);
+    }
+}
+
+// Writes buffer_int to the appropriate field, whether it be reps.value, or a modifier.
+// if `vcount` is defined and there is a modifier to be applied, flush will write to 
+// the specified vReps[vcount], otherwise, it will apply `buf` as a macro. If there is none work,
+// flush will malloc tst->no_work. flush() does not write to sets.
+static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount) {
+    if (*dcount == 1) {
+        printf("There must be at least one digit following the radix point.");
+        cond_bail_parse_single_t(NULL, tst);
+    }
+
+    switch (kind) {
+        case none:
+            switch (mod) {
+                case no_mod:
+                    tst->no_work = malloc(sizeof(int));
+                    cond_bail_parse_single_t(tst->no_work, tst);
+                    break;
+                default:
+                    printf("You cannot add a modifier to none work");
+                    cond_bail_parse_single_t(NULL, tst);
+            }
+            break;
+        case standard:
+            switch (mod) {
+                case no_mod:
+                    tst->standard_work->reps.value = *buf; 
+                    break;
+                case weight_mod:
+                    tst->standard_work->reps.mod = weight_mod;
+                    tst->standard_work->reps.modifier.weight = *buf; 
+                    break;
+                case rpe_mod:
+                    tst->standard_work->reps.mod = rpe_mod;
+                    tst->standard_work->reps.modifier.rpe = *buf;
+                    break;
+            }
+            break;
+        case standard_varied:
+            if (vcount == NULL) { // MACRO MODIFIER
+                switch (mod) {
+                    case no_mod:
+                        break;
+                    case weight_mod:
+                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+                            if (tst->standard_varied_work->vReps[i].mod == no_mod) {
+                                tst->standard_varied_work->vReps[i].mod = weight_mod;
+                                tst->standard_varied_work->vReps[i].modifier.weight = *buf;
+                            }
+                        }
+                        break;
+                    case rpe_mod:
+                        for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+                            if (tst->standard_varied_work->vReps[i].mod == no_mod) {
+                                tst->standard_varied_work->vReps[i].mod = rpe_mod;
+                                tst->standard_varied_work->vReps[i].modifier.rpe = *buf;
+                            }
+                        }
+                        break;
+                }
+            } else { // INNER-MODIFIER
+                switch (mod) {
+                    case no_mod:
+                        tst->standard_varied_work->vReps[*vcount].value = *buf;
+                        break;
+                    case weight_mod:
+                        tst->standard_varied_work->vReps[*vcount].mod = weight_mod;
+                        tst->standard_varied_work->vReps[*vcount].modifier.weight = *buf;
+                        break;
+                    case rpe_mod:
+                        tst->standard_varied_work->vReps[*vcount].mod = rpe_mod;
+                        tst->standard_varied_work->vReps[*vcount].modifier.rpe = *buf;
+                        break;
+                }
+            }
+            break;
+    }
+
+    *buf = 0;
+    *dcount = 0;
+    return;
+}
+
+// Moves eml_single_t->(no_work | standard_work | standard_varied_work) to the left (false) or right (true) side of asymmetric_work
+// Precondition: eml_single_t->asymmetric_work must be initialized
+static void moveToAsymmetric(eml_single_t *tst, bool side) {
+    if (tst->no_work != NULL) {
+        if (side) {
+            tst->asymmetric_work->right_none_k = tst->no_work;
+        } else {
+            tst->asymmetric_work->left_none_k = tst->no_work;
+        }
+        
+        tst->no_work = NULL;
+    }
+    else if (tst->standard_work != NULL) {
+        if (side) {
+            tst->asymmetric_work->right_standard_k = tst->standard_work;
+        } else {
+            tst->asymmetric_work->left_standard_k = tst->standard_work;
+        }
+
+        tst->standard_work = NULL;
+    }
+    else if (tst->standard_varied_work != NULL) {
+        if (side) {
+            tst->asymmetric_work->right_standard_varied_k = tst->standard_varied_work;
+        } else {
+            tst->asymmetric_work->left_standard_varied_k = tst->standard_varied_work;
+        }
+
+        tst->standard_varied_work = NULL;
+    }
+}
+
+// Allocates asymmetric & moves existing eml_single_t->(no_work | standard_work | standard_varied_work) kind to left side.
+static void upgradeToAsymmetric(eml_single_t *tst) {
+    tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
+    cond_bail_parse_single_t(tst->asymmetric_work, tst);
+
+    tst->asymmetric_work->left_none_k = NULL;
+    tst->asymmetric_work->left_standard_k = NULL;
+    tst->asymmetric_work->left_standard_varied_k = NULL;
+    tst->asymmetric_work->right_none_k = NULL;
+    tst->asymmetric_work->right_standard_k = NULL;
+    tst->asymmetric_work->right_standard_varied_k = NULL;
+
+    moveToAsymmetric(tst, 0);
+}
+
+// Allocates standard_varied_work & transitions existing eml_single_t->standard_work.
+static void upgradeToStandardVaried(eml_single_t *tst) {
+    tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(eml_number));
+    cond_bail_parse_single_t(tst->standard_varied_work, tst);
+    
+    tst->standard_varied_work->sets = tst->standard_work->sets;
+
+    // standard_varied_kind defaults
+    for (int i = 0; i < tst->standard_varied_work->sets; i++) {
+        tst->standard_varied_work->vReps[i].isTime = false;
+        tst->standard_varied_work->vReps[i].toFailure = false;
+        tst->standard_varied_work->vReps[i].mod = no_mod;
+    }
+
+    free(tst->standard_work);
+    tst->standard_work = NULL;
+}
+
+// Allocates standard_work
+static void upgradeToStandard(eml_single_t *tst) {
+    tst->standard_work = malloc(sizeof(eml_standard_k));
+    cond_bail_parse_single_t(tst->standard_work, tst);
+    tst->standard_work->reps.isTime = false;
+    tst->standard_work->reps.toFailure = false;
+    tst->standard_work->reps.mod = no_mod;
+    return;
 }
 
 // Returns a temporary formatted eml_number string which is valid until next call.
