@@ -14,16 +14,11 @@ static char *emlString;
 static int emlstringlen;
 static int current_postition;
 
+static Array result;
+
 static const struct HeaderToken empty_header_t;
-static const struct Reps empty_reps;
-static const struct Standard empty_standard_k;
-static const struct StandardVaried empty_standard_varied_k;
-static const struct Asymmetric empty_asymetric_k;
-static const struct Single empty_single_t;
-static const struct Superset empty_super_t;
 
 static void validate_header_t(eml_header_t *h);
-static void rolling_int(char new_char, eml_number *dest);
 
 static void parse();
 static void parse_header();
@@ -38,6 +33,7 @@ static void upgradeToAsymmetric(eml_single_t *tst);
 static void upgradeToStandardVaried(eml_single_t *tst);
 static void upgradeToStandard(eml_single_t *tst);
 
+static char *format_eml_number(eml_number *e);
 static void print_standard_k(eml_standard_k *k);
 static void print_standard_varied_k(eml_standard_varied_k *k);
 static void print_single_t(eml_single_t *s);
@@ -49,21 +45,14 @@ static void free_super_t(eml_super_t *s);
 static void free_emlobj(eml_obj *e);
 static void free_results();
 
-typedef struct {
-    eml_obj *array;
-    size_t used;
-    size_t size;
-} Array;
-
 static void initArray(Array *a, size_t size);
 static void insertArray(Array *a, eml_obj obj);
 static void freeArray(Array *a);
 
-static Array result;
 
 int main(int argc, char *argv[]){
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\"::4x(4,3,2,1);"; // asymetrical mixed
@@ -724,7 +713,7 @@ static void upgradeToAsymmetric(eml_single_t *tst) {
 
 // Allocates standard_varied_work & transitions existing eml_single_t->standard_work.
 static void upgradeToStandardVaried(eml_single_t *tst) {
-    tst->standard_varied_work = malloc(sizeof(empty_reps) * tst->standard_work->sets + sizeof(eml_number));
+    tst->standard_varied_work = malloc(sizeof(eml_reps) * tst->standard_work->sets + sizeof(eml_number));
     cond_bail_parse_single_t(tst->standard_varied_work, tst);
     
     tst->standard_varied_work->sets = tst->standard_work->sets;
@@ -812,7 +801,7 @@ static void print_standard_varied_k(eml_standard_varied_k *k) {
         printf(" - ");
 
         // standard_varied_k emulates standard_k for printing
-        eml_standard_k shim = empty_standard_k;
+        eml_standard_k shim;
         shim.sets = k->sets;
         shim.reps = k->vReps[i];
         print_standard_k(&shim); // FIXME: Prints X sets of ... on every line

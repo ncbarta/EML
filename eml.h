@@ -86,3 +86,9 @@ typedef struct EMLObj {
     eml_objtype type;
     void        *data;
 } eml_obj;
+
+typedef struct {
+    eml_obj *array;
+    uint32_t used;
+    uint32_t size;
+} Array;
