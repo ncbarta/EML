@@ -55,7 +55,7 @@ static void freeArray(Array *a);
 static Array result;
 
 int main(int argc, char *argv[]){
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
@@ -84,7 +84,8 @@ int main(int argc, char *argv[]){
 
     // Fractional 
     // MAX: 21474835
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":8x7.7@21474835.0;"; // standard fractional
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":8x7@.0;"; // standard fractional
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770.99,3%30.50,20T,1)@120.2:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe + frac
 
     // Superset/Circuit
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
@@ -652,6 +653,11 @@ static eml_single_t *parse_single_t() {
                 cond_bail_parse_single_t(NULL, tst);
             }
 
+            if (modifier == no_mod) {
+                printf("You cannot have fractional reps / timesets");
+                cond_bail_parse_single_t(NULL, tst);
+            }
+
             // Set H bit, potential overflow handled in `default`
             buffer_int = buffer_int * 100U | eml_number_H; 
 
@@ -674,7 +680,7 @@ static eml_single_t *parse_single_t() {
             else {
                 uint32_t temp;
 
-                switch (dcount) { // do & *condition* to exclude sets/reps.value from cases > 0. *(((kind + 1) >> 1)) & 0x1
+                switch (dcount) {
                     case 0: // Before radix
                         temp = buffer_int * 10U + (unsigned int)current - '0';
 
