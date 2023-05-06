@@ -165,9 +165,6 @@ static void parse() {
         case (int)';':
             ++current_postition;
             break;
-        case (int)')':
-            ++current_postition;
-            break;
         default:
             break;
         }
@@ -198,7 +195,7 @@ static void parse_header() {
             parse_header_t(&tht); // Pass control to new_parse_header_t()
             break;
         default:
-            exit(-1);
+            exit(1);
             break;
         }
     }
@@ -235,7 +232,7 @@ static void parse_header_t(eml_header_t* tht) {
     }
 }
 
-// Starts on 's' of super. Ends on ')'.
+// Starts on 's' of super. Ends succeeding ')'.
 static eml_super_t *parse_super_t() {
     eml_super_t *tsupt = NULL; // Will be allocated just in time
     eml_single_t *tst = NULL;
@@ -253,23 +250,13 @@ static eml_super_t *parse_super_t() {
                 break;
             case (int)'\"':
                 tst = parse_single_t();
-                break;
-            case (int)';':
-                ++current_postition;
 
                 eml_obj temp;
                 temp.type = single;
                 temp.data = tst;
                 insertArray(&dynamicSets, temp);
-
                 break;
             case (int)')':
-                // Closing a superset & single_t.standard_varied_work
-                // if (single) {
-                //     insertArray(&dynamicSets, tst);
-                //     tst = empty_single_t;
-                // }
-
                 // pass back tsupt
                 tsupt = calloc(1, sizeof(int) + sizeof(eml_single_t) * dynamicSets.used);
                 if (tsupt == NULL) {
@@ -286,8 +273,9 @@ static eml_super_t *parse_super_t() {
                 }
                 freeArray(&dynamicSets);
 
+                ++current_postition;
                 return tsupt;
-            default:
+            default: // skip {'u', 'p', 'e', 'r'} and {'i', 'r', 'c', 'u', 'i', 't'}
                 ++current_postition;
                 break;
         }
@@ -299,8 +287,7 @@ static eml_super_t *parse_super_t() {
     return NULL; // Should not return NULL
 }
 
-// Starts on NAME ('"'), ends on ';'
-// Can not return NULL
+// Starts on NAME '"', ends succeeding ';'
 static eml_single_t *parse_single_t() {
     eml_single_t *tst = calloc(1, sizeof(eml_single_t));
     if (tst == NULL) {
@@ -320,7 +307,11 @@ static eml_single_t *parse_single_t() {
 
     uint32_t temp;              // Used for building eml_number in `default`
 
-    ++current_postition; // Skip ':'
+    if (emlString[current_postition++] != (int)':') {
+        printf("You must include the ':' separator between NAME and WORK");
+        cond_bail_parse_single_t(NULL, tst);
+    }
+
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
 
@@ -510,6 +501,7 @@ static eml_single_t *parse_single_t() {
                 moveToAsymmetric(tst, 1);
             }
 
+            ++current_postition;
             return tst; // Give control back
         default:
             switch (dcount) {
