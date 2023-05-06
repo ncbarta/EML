@@ -52,7 +52,7 @@ static void freeArray(Array *a);
 
 int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\"::4x(4,3,2,1);"; // asymetrical mixed
@@ -85,6 +85,12 @@ int main(int argc, char *argv[]){
 
     // Superset/Circuit
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+
+    // Name 
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"nathans-super-epic-amazing-special-exercise-with-some-awesomely-cool-modifications-and-a-super-long-name-that-has-128-characters\":5x5;"; //max
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"exx\":5x5;"; // min
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
+
     emlstringlen = strlen(emlstring);
 
     printf("EML String: %s, length: %i\n", emlstring, emlstringlen);
@@ -308,6 +314,11 @@ static eml_single_t *parse_single_t() {
     eml_number buffer_int = 0;
     uint32_t dcount = 0;
 
+    #define MAX_NAME_LENGTH 128
+
+    char strbuf[MAX_NAME_LENGTH + 1];
+    uint32_t strindex = 0;
+
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
 
@@ -327,6 +338,17 @@ static eml_single_t *parse_single_t() {
 
                 // Upgrade existing eml_single_t to asymmetric
                 upgradeToAsymmetric(tst);
+            } else {
+                if (strindex == 0) {
+                    printf("Exercise names must be at least one character");
+                    cond_bail_parse_single_t(NULL, tst);
+                }
+
+                tst->name = malloc(strindex + 1);
+                cond_bail_parse_single_t(tst->name, tst);
+            
+                strncpy(tst->name, strbuf, MAX_NAME_LENGTH + 1);
+                tst->name[strindex] = '\0';
             }
 
             body_single_t_nw = true;
@@ -505,7 +527,12 @@ static eml_single_t *parse_single_t() {
             return tst; // Give control back
         default:
             if (body_single_t_nw == false) {
-                strncat(tst->name, &current, 1); // FIXME: Validation & NULL terminator 
+                if (strindex >= 127) {
+                    printf("Name must be 128 characters or less");
+                    cond_bail_parse_single_t(NULL, tst);
+                }
+
+                strbuf[strindex++] = current;
             }
             else {
                 uint32_t temp;
@@ -863,6 +890,10 @@ static void print_emlobj(eml_obj *e) {
 }
 
 static void free_single_t(eml_single_t *s) {
+    if (s->name != NULL) {
+        free(s->name);
+    }
+
     if (s->no_work != NULL) {
         free(s->no_work);
     }

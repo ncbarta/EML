@@ -65,7 +65,7 @@ typedef struct Asymmetric {
 // EML Tokens
 
 typedef struct Single {
-    char name[128];
+    char *name;
     eml_none_k *no_work;
     eml_standard_k *standard_work;
     eml_standard_varied_k *standard_varied_work;
