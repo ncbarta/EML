@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define MAX_NAME_LENGTH 128
+
 #define true 1
 #define false 0
 
@@ -23,6 +25,7 @@ static void validate_header_t(eml_header_t *h);
 static void parse();
 static void parse_header();
 static void parse_header_t(eml_header_t* tht);
+static char *parse_string();
 static eml_super_t *parse_super_t();
 static eml_single_t *parse_single_t();
 
@@ -54,7 +57,7 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard varied
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\"::4x(4,3,2,1);"; // asymetrical mixed
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":;"; // none
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\"::;"; // asymetric none
@@ -88,8 +91,8 @@ int main(int argc, char *argv[]){
 
     // Name 
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"nathans-super-epic-amazing-special-exercise-with-some-awesomely-cool-modifications-and-a-super-long-name-that-has-128-characters\":5x5;"; //max
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"exx\":5x5;"; // min
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"E\":5x5;"; // min
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
 
     emlstringlen = strlen(emlstring);
 
@@ -305,20 +308,19 @@ static eml_single_t *parse_single_t() {
         exit(1);
     }
 
+    tst->name = parse_string();
+    cond_bail_parse_single_t(tst->name, tst);
+
     eml_kind_flag kind = none;
     eml_modifier_flag modifier = no_mod; 
-    bool body_single_t_nw = false; // Toggle between name & work
-    uint32_t body_standard_varied_vcount = 0;  // Index of standard_varied_k.vReps[]
-    bool is_asymetric = false;
 
-    eml_number buffer_int = 0;
-    uint32_t dcount = 0;
+    eml_number buffer_int = 0;  // Rolling eml_number
+    uint32_t dcount = 0;        // If >0, writing to (dcount * 10)'ths place, >2 error
+    uint32_t vcount = 0;        // Index of standard_varied_k.vReps[]
 
-    #define MAX_NAME_LENGTH 128
+    uint32_t temp;              // Used for building eml_number in `default`
 
-    char strbuf[MAX_NAME_LENGTH + 1];
-    uint32_t strindex = 0;
-
+    ++current_postition; // Skip ':'
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
 
@@ -328,32 +330,16 @@ static eml_single_t *parse_single_t() {
             break;
         case (int)':':
             // Upgrade to asymetric_k
-            if (body_single_t_nw == true) {
-                // Write value/modifier. If kind == standard_varied_work, write as macro.
-                flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
+            // Write value/modifier. If kind == standard_varied_work, write as macro.
+            flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
 
-                modifier = no_mod;
-                is_asymetric = true;
-                kind = none;
+            modifier = no_mod;
+            kind = none;
 
-                // Upgrade existing eml_single_t to asymmetric
-                upgradeToAsymmetric(tst);
-            } else {
-                if (strindex == 0) {
-                    printf("Exercise names must be at least one character");
-                    cond_bail_parse_single_t(NULL, tst);
-                }
-
-                tst->name = malloc(strindex + 1);
-                cond_bail_parse_single_t(tst->name, tst);
+            // Upgrade existing eml_single_t to asymmetric
+            upgradeToAsymmetric(tst);
             
-                strncpy(tst->name, strbuf, MAX_NAME_LENGTH + 1);
-                tst->name[strindex] = '\0';
-            }
-
-            body_single_t_nw = true;
             ++current_postition;
-
             break;
         case (int)'x':
             // Allocate standard_work & set sets.
@@ -369,38 +355,38 @@ static eml_single_t *parse_single_t() {
             // Allocate standard_varied_work & dealloc/transition standard_work
             upgradeToStandardVaried(tst);
 
-            body_standard_varied_vcount = 0;
+            vcount = 0;
             kind = standard_varied;
 
             ++current_postition;
             break;
         case (int)',':
-            if (body_standard_varied_vcount > tst->standard_varied_work->sets) {
+            if (vcount > tst->standard_varied_work->sets) {
                 printf("Too many variable reps\n");
                 cond_bail_parse_single_t(NULL, tst);
             }
 
             // Write reps/(internal)modifiers
-            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int, &dcount);
+            flush(tst, &vcount, kind, modifier, &buffer_int, &dcount);
 
-            body_standard_varied_vcount++;
+            vcount++;
             modifier = no_mod;
 
             ++current_postition;
             break;
         case (int)')':
-            if (body_standard_varied_vcount > tst->standard_varied_work->sets) {
+            if (vcount > tst->standard_varied_work->sets) {
                 printf("Too many variable reps\n");
                 cond_bail_parse_single_t(NULL, tst);
             }
 
             // Write reps/(internal)modifiers
-            flush(tst, &body_standard_varied_vcount, kind, modifier, &buffer_int, &dcount);
+            flush(tst, &vcount, kind, modifier, &buffer_int, &dcount);
 
-            body_standard_varied_vcount++;
+            vcount++;
             modifier = no_mod;
 
-            if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
+            if (vcount < tst->standard_varied_work->sets) {
                 printf("Too few variable reps\n");
                 cond_bail_parse_single_t(NULL, tst);
             }
@@ -416,8 +402,8 @@ static eml_single_t *parse_single_t() {
                     break;
                 case standard_varied:
                     // Apply 'toFailure' to internal Reps
-                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[body_standard_varied_vcount].toFailure = true;
+                    if (vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[vcount].toFailure = true;
                     }
                     else {
                         printf("You cannot use 'to failure' as a macro");
@@ -438,8 +424,8 @@ static eml_single_t *parse_single_t() {
                     break;
                 case standard_varied:
                     // Apply 'isTime' to internal Reps
-                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[body_standard_varied_vcount].isTime = true;
+                    if (vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[vcount].isTime = true;
                     }
                     else {
                         printf("You cannot attach time as a macro");
@@ -460,8 +446,8 @@ static eml_single_t *parse_single_t() {
                     break;
                 case standard_varied:
                     // Apply weight modifier to internal Reps (EX: 3x(5@120,...,...))
-                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
+                    if (vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[vcount].value = buffer_int;
                     }
                     break;
             }
@@ -482,8 +468,8 @@ static eml_single_t *parse_single_t() {
                     break;
                 case standard_varied:
                     // Apply weight modifier to internal Reps (EX: 3x(5%120,...,...))
-                    if (body_standard_varied_vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[body_standard_varied_vcount].value = buffer_int;
+                    if (vcount < tst->standard_varied_work->sets) {
+                        tst->standard_varied_work->vReps[vcount].value = buffer_int;
                     }
                     break;
             }
@@ -520,63 +506,51 @@ static eml_single_t *parse_single_t() {
             // Write value/modifier. If kind == standard_varied_work, write as macro.
             flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
 
-            if (is_asymetric) {
+            if (tst->asymmetric_work != NULL) {
                 moveToAsymmetric(tst, 1);
             }
 
             return tst; // Give control back
         default:
-            if (body_single_t_nw == false) {
-                if (strindex >= 127) {
-                    printf("Name must be 128 characters or less");
-                    cond_bail_parse_single_t(NULL, tst);
-                }
+            switch (dcount) {
+                case 0: // Before radix
+                    temp = buffer_int * 10U + (unsigned int)current - '0';
 
-                strbuf[strindex++] = current;
-            }
-            else {
-                uint32_t temp;
-
-                switch (dcount) {
-                    case 0: // Before radix
-                        temp = buffer_int * 10U + (unsigned int)current - '0';
-
-                        if (temp > 21474835U) { 
-                            printf("Overflow");
-                            cond_bail_parse_single_t(NULL, tst);
-                        }
-
-                        buffer_int = temp;
-                        break;
-                    case 1: // 10ths place
-                        temp = buffer_int + ((unsigned int)current - '0') * 10U;
-
-                        if ((temp & eml_number_mask) > 2147483500U) {
-                            printf("FP Overflow");
-                            cond_bail_parse_single_t(NULL, tst);
-                        }
-
-                        buffer_int = temp;
-                        dcount++;
-                        break;
-                    case 2: // 100ths place
-                        temp = buffer_int + ((unsigned int)current - '0');
-
-                        if ((temp & eml_number_mask) > 2147483500U) {
-                            printf("FP Overflow");
-                            cond_bail_parse_single_t(NULL, tst);
-                        }
-
-                        buffer_int = temp;
-                        dcount++;
-                        break;
-                    default:
-                        printf("Too many numbers right of the radix point");
+                    if (temp > 21474835U) { 
+                        printf("Overflow");
                         cond_bail_parse_single_t(NULL, tst);
-                        break;
-                }
-            }
+                    }
 
+                    buffer_int = temp;
+                    break;
+                case 1: // 10ths place
+                    temp = buffer_int + ((unsigned int)current - '0') * 10U;
+
+                    if ((temp & eml_number_mask) > 2147483500U) {
+                        printf("FP Overflow");
+                        cond_bail_parse_single_t(NULL, tst);
+                    }
+
+                    buffer_int = temp;
+                    dcount++;
+                    break;
+                case 2: // 100ths place
+                    temp = buffer_int + ((unsigned int)current - '0');
+
+                    if ((temp & eml_number_mask) > 2147483500U) {
+                        printf("FP Overflow");
+                        cond_bail_parse_single_t(NULL, tst);
+                    }
+
+                    buffer_int = temp;
+                    dcount++;
+                    break;
+                default:
+                    printf("Too many numbers right of the radix point");
+                    cond_bail_parse_single_t(NULL, tst);
+                    break;
+            }
+            
             ++current_postition;
             break;
         }
@@ -598,6 +572,51 @@ static void validate_header_t(eml_header_t *h) {
     }
 
     *h = empty_header_t;
+}
+
+static char *parse_string() {
+    char *result;
+
+    char strbuf[MAX_NAME_LENGTH + 1];
+    uint32_t strindex = 0;
+
+    ++current_postition; // skip '"'
+    while (current_postition < emlstringlen) {
+        char current = emlString[current_postition];
+
+        switch (current) {
+            case (int)'\"':
+                ++current_postition;
+
+                if (strindex == 0) {
+                    printf("Strings must be at least one character");
+                    free_results();
+                    exit(1);
+                }
+
+                result = malloc(strindex + 1);
+                if (result == NULL) {
+                    free_results();
+                    exit(1);
+                }
+            
+                strncpy(result, strbuf, MAX_NAME_LENGTH + 1);
+                result[strindex] = '\0';
+                return result;
+            default:
+                if (strindex > 127) {
+                    printf("String must be 128 characters or less");
+                    free_results();
+                    exit(1);
+                }
+
+                strbuf[strindex++] = current;
+                ++current_postition;
+                break;
+        }
+    }
+
+    return NULL;
 }
 
 // Frees up memory and stops execution of parse_single_t if *p is NULL
