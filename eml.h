@@ -16,8 +16,9 @@ typedef enum AttachingModifierFlag { no_mod, weight_mod, rpe_mod } eml_modifier_
 
 // Header Token
 typedef struct HeaderToken {
-    char parameter[24]; // maybe malloc these instead
-    char value[24];
+    struct HeaderToken *next;
+    char *parameter;
+    char *value;
 } eml_header_t;
 
 // Modifier

@@ -3,13 +3,14 @@
 #include <string.h>
 #include <stdlib.h>
 
+// #define EML_PARSER_VERSION "0.0.0"
 #define MAX_NAME_LENGTH 128
 
 #define true 1
 #define false 0
 
 // Parser parameters
-static char version[4]; // up to 9.9
+static char version[13];
 static char weight[4];
 
 static char *emlString;
@@ -17,6 +18,7 @@ static int emlstringlen;
 static int current_postition;
 
 static Array result;
+static eml_header_t *header;
 
 static const struct HeaderToken empty_header_t;
 
@@ -24,8 +26,8 @@ static void validate_header_t(eml_header_t *h);
 
 static void parse();
 static void parse_header();
-static void parse_header_t(eml_header_t* tht);
 static char *parse_string();
+static eml_header_t *parse_header_t();
 static eml_super_t *parse_super_t();
 static eml_single_t *parse_single_t();
 
@@ -47,11 +49,11 @@ static void free_single_t(eml_single_t *s);
 static void free_super_t(eml_super_t *s);
 static void free_emlobj(eml_obj *e);
 static void free_results();
+static void free_header();
 
 static void initArray(Array *a, size_t size);
 static void insertArray(Array *a, eml_obj obj);
 static void freeArray(Array *a);
-
 
 int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
@@ -116,6 +118,7 @@ int main(int argc, char *argv[]){
     }
     
     free(emlString);
+    free_header();
     return 0;
 }
 
@@ -174,7 +177,7 @@ static void parse() {
 
 // Starts on "{" of header, ends on char succeeding "}"
 static void parse_header() {
-    eml_header_t tht = empty_header_t;
+    eml_header_t *tht = NULL;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -184,15 +187,16 @@ static void parse_header() {
             current_postition++;
             break;
         case (int)'}': // Release control & inc
-            validate_header_t(&tht);
             ++current_postition;
             return;
         case (int)',':
-            validate_header_t(&tht);
             ++current_postition;
             break;
         case (int)'\"':
-            parse_header_t(&tht); // Pass control to new_parse_header_t()
+            tht = parse_header_t(); // Pass control to new_parse_header_t()
+            validate_header_t(tht);
+            tht->next = header;
+            header = tht;
             break;
         default:
             exit(1);
@@ -201,7 +205,9 @@ static void parse_header() {
     }
 }
 
-static void parse_header_t(eml_header_t* tht) {
+static eml_header_t *parse_header_t() {
+    eml_header_t *tht = malloc(sizeof(eml_header_t));
+    
     bool header_header_t_pv = false; // Toggle between parameter & value
 
     while (current_postition < emlstringlen) {
@@ -209,27 +215,37 @@ static void parse_header_t(eml_header_t* tht) {
 
         switch (current) {
             case (int)'}': // Release control
-                return;
+                return tht;
             case (int)',': // Release control
-                return;
+                return tht;
             case (int)':':
                 header_header_t_pv = true;
                 ++current_postition;
                 break;
             case (int)'\"':
-                ++current_postition;
-                break;
-            default:
                 if (header_header_t_pv == false) {
-                    strncat(tht->parameter, &current, 1);
+                    tht->parameter = parse_string();
+                    if (tht->parameter == NULL) {
+                        free(tht);
+                        exit(1);
+                    }
                 }
                 else {
-                    strncat(tht->value, &current, 1);
+                    tht->value = parse_string();
+                    if (tht->value == NULL) {
+                        free(tht->parameter);
+                        free(tht);
+                        exit(1);
+                    }
                 }
-                ++current_postition;
+                break;
+            default:
+                exit(1);
                 break;
         }
     }
+
+    return NULL;
 }
 
 // Starts on 's' of super. Ends succeeding ')'.
@@ -556,14 +572,14 @@ static eml_single_t *parse_single_t() {
 
 static void validate_header_t(eml_header_t *h) {
     if (strcmp(h->parameter, "version") == 0) {
-        strcpy(version, h->value);
+        strncpy(version, h->value, 12);
+        version[11] = '\0';
     }
 
     if (strcmp(h->parameter, "weight") == 0) {
-        strcpy(weight, h->value);
+        strncpy(weight, h->value, 4);
+        weight[3] = '\0';
     }
-
-    *h = empty_header_t;
 }
 
 static char *parse_string() {
@@ -997,4 +1013,16 @@ static void freeArray(Array *a) {
     free(a->array);
     a->array = NULL;
     a->used = a->size = 0;
+}
+
+static void free_header() {
+    eml_header_t *h = header;
+    while (header != NULL) {
+        header = header->next;
+
+        free(h->parameter);
+        free(h->value);
+        free(h);
+        h = header;
+    }
 }

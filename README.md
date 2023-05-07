@@ -12,7 +12,6 @@ Parsing single & super tokens of any kind with any modifier(s). <- See spec for 
 - Address copious security issues
 - Write test cases 
 - Conform to rules
-- Add decimals 
 - Add error messages
 - Refactor
 - Bindings to Swift, Go, Python
