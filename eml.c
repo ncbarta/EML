@@ -4,23 +4,40 @@
 #include <stdlib.h>
 
 // #define EML_PARSER_VERSION "0.0.0"
+
+/*
+ * The maximum length a user-input string may be (excluding sentinel)
+ */
 #define MAX_NAME_LENGTH 128
 
 #define true 1
 #define false 0
 
-// Parser parameters
+/* 
+ * Parser Parameters:
+ * version - the version in the eml header
+ * weight - the weight abbreviation in the eml header
+ */ 
 static char version[13];
 static char weight[4];
 
+/*
+ * Global Parser Vars:
+ * emlString - The eml to be parsed
+ * emlstringlen - The length of the emlString (excluding sentinel)
+ * current_position - The index of emlString the parser is currently on
+*/
 static char *emlString;
 static int emlstringlen;
 static int current_postition;
 
+/*
+ * Parser Output:
+ * result - Parsed eml objects
+ * header - Linked List of header tokens
+*/
 static Array result;
 static eml_header_t *header;
-
-static const struct HeaderToken empty_header_t;
 
 static void validate_header_t(eml_header_t *h);
 
@@ -122,6 +139,9 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
+/*
+ * parse: Entry point for parsing eml. Starts at '{', ends at (emlstringlen - 1)
+*/
 static void parse() {
     current_postition = 0;
 
@@ -175,7 +195,9 @@ static void parse() {
     return;
 }
 
-// Starts on "{" of header, ends on char succeeding "}"
+/*
+ * parse_header: Parses header section or exits. Starts on "{" of header, ends on char succeeding "}"
+*/
 static void parse_header() {
     eml_header_t *tht = NULL;
 
@@ -205,6 +227,9 @@ static void parse_header() {
     }
 }
 
+/*
+ * parse_header_t: Returns an eml_header_t or exits. Starts on '"', ends on ',' or '}'.
+*/
 static eml_header_t *parse_header_t() {
     eml_header_t *tht = malloc(sizeof(eml_header_t));
     
@@ -248,7 +273,9 @@ static eml_header_t *parse_header_t() {
     return NULL;
 }
 
-// Starts on 's' of super. Ends succeeding ')'.
+/*
+ * parse_super_t: Returns an eml_super_t or exits. Starts on 's', ends succeeding ')'.
+*/
 static eml_super_t *parse_super_t() {
     eml_super_t *tsupt = NULL; // Will be allocated just in time
     eml_single_t *tst = NULL;
@@ -303,7 +330,9 @@ static eml_super_t *parse_super_t() {
     return NULL; // Should not return NULL
 }
 
-// Starts on NAME '"', ends succeeding ';'
+/*
+ * parse_single_t: Returns an eml_single_t or exits. Starts on '"', ends succeeding ';'
+*/
 static eml_single_t *parse_single_t() {
     eml_single_t *tst = calloc(1, sizeof(eml_single_t));
     if (tst == NULL) {
@@ -582,6 +611,9 @@ static void validate_header_t(eml_header_t *h) {
     }
 }
 
+/*
+ * parse_string: Returns a string (char*) or exits. Starts on '"', ends succeeding the next '"'
+*/
 static char *parse_string() {
     char *result;
 
@@ -627,7 +659,9 @@ static char *parse_string() {
     return NULL;
 }
 
-// Frees up memory and stops execution of parse_single_t if *p is NULL
+/*
+ * cond_bail_parse_single_t: Conditionally stops the execution of parse_single_t (or child functions) if *p is NULL, frees tst, results, and exits.
+*/
 static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
     if (p == NULL) {
         free_single_t(tst);
@@ -636,10 +670,10 @@ static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
     }
 }
 
-// Writes buffer_int to the appropriate field, whether it be reps.value, or a modifier.
-// if `vcount` is defined and there is a modifier to be applied, flush will write to 
-// the specified vReps[vcount], otherwise, it will apply `buf` as a macro. If there is none work,
-// flush will malloc tst->no_work. flush() does not write to sets.
+/* 
+ * flush: Writes buf to the appropriate field in eml_single_t or exits. If there is none work, flush will malloc tst->no_work. 
+ *        If `vcount` is NULL, modifier will be applied as a macro. Resets `buf` and `dcount`.
+*/
 static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount) {
     if (*dcount == 1) {
         printf("There must be at least one digit following the radix point.");
@@ -718,8 +752,9 @@ static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_m
     return;
 }
 
-// Moves eml_single_t->(no_work | standard_work | standard_varied_work) to the left (false) or right (true) side of asymmetric_work
-// Precondition: eml_single_t->asymmetric_work must be initialized
+/*
+ * moveToAsymmetric: Moves tst->(no_work | standard_work | standard_varied_work) kind to the left (false) or right (true) side of tst->asymmetric_work.
+*/
 static void moveToAsymmetric(eml_single_t *tst, bool side) {
     if (tst->no_work != NULL) {
         if (side) {
@@ -750,7 +785,9 @@ static void moveToAsymmetric(eml_single_t *tst, bool side) {
     }
 }
 
-// Allocates asymmetric & moves existing eml_single_t->(no_work | standard_work | standard_varied_work) kind to left side.
+/*
+ * upgradeToAsymmetric: Allocates tst->asymmetric_work & moves existing tst->(no_work | standard_work | standard_varied_work) kind to left side.
+*/
 static void upgradeToAsymmetric(eml_single_t *tst) {
     tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
     cond_bail_parse_single_t(tst->asymmetric_work, tst);
@@ -765,7 +802,9 @@ static void upgradeToAsymmetric(eml_single_t *tst) {
     moveToAsymmetric(tst, 0);
 }
 
-// Allocates standard_varied_work & transitions existing eml_single_t->standard_work.
+/*
+ * upgradeToStandardVaried: Allocates tst->standard_varied_work & migrates tst->standard_work.
+*/
 static void upgradeToStandardVaried(eml_single_t *tst) {
     tst->standard_varied_work = malloc(sizeof(eml_reps) * tst->standard_work->sets + sizeof(eml_number));
     cond_bail_parse_single_t(tst->standard_varied_work, tst);
@@ -783,7 +822,9 @@ static void upgradeToStandardVaried(eml_single_t *tst) {
     tst->standard_work = NULL;
 }
 
-// Allocates standard_work
+/*
+ * upgradeToStandard: Allocates tst->standard_work.
+*/
 static void upgradeToStandard(eml_single_t *tst) {
     tst->standard_work = malloc(sizeof(eml_standard_k));
     cond_bail_parse_single_t(tst->standard_work, tst);
@@ -793,7 +834,9 @@ static void upgradeToStandard(eml_single_t *tst) {
     return;
 }
 
-// Returns a temporary formatted eml_number string which is valid until next call.
+/*
+ * format_eml_number: Returns a temporary formatted eml_number string which is valid until next call or exits.
+*/
 static char *format_eml_number(eml_number *e) {
     static char f[12];
 
@@ -813,6 +856,9 @@ static char *format_eml_number(eml_number *e) {
     return f;
 }
 
+/*
+ * print_standard_k: Prints an eml_standard_k.
+*/
 static void print_standard_k(eml_standard_k *k) {
     eml_reps reps = k->reps;
 
@@ -848,6 +894,9 @@ static void print_standard_k(eml_standard_k *k) {
     printf("\n");
 }
 
+/*
+ * print_standard_varied_k: Prints an eml_standard_varied_k.
+*/
 static void print_standard_varied_k(eml_standard_varied_k *k) {
     int count = k->sets;
     printf("%i sets\n", count);
@@ -862,6 +911,9 @@ static void print_standard_varied_k(eml_standard_varied_k *k) {
     }
 }
 
+/*
+ * print_single_t: Prints a eml_single_t.
+*/
 static void print_single_t(eml_single_t *s) {
     printf("--- Printing single_t ---\n");
     printf("Name: %s\n", s->name);
@@ -899,6 +951,9 @@ static void print_single_t(eml_single_t *s) {
     }
 }
 
+/*
+ * print_super_t: Prints a eml_super_t.
+*/
 static void print_super_t(eml_super_t *s) {
     printf("-------------------- Super --------------------\n");
     for (int i = 0; i < s->count; i++) {
@@ -908,6 +963,9 @@ static void print_super_t(eml_super_t *s) {
     return;
 }
 
+/*
+ * print_emlobj: Prints an eml_obj.
+*/
 static void print_emlobj(eml_obj *e) {
     if (e->type == single) {
         print_single_t((eml_single_t*) e->data);
@@ -916,6 +974,9 @@ static void print_emlobj(eml_obj *e) {
     }
 }
 
+/*
+ * free_single_t: Frees a eml_single_t.
+*/
 static void free_single_t(eml_single_t *s) {
     if (s->name != NULL) {
         free(s->name);
@@ -964,6 +1025,9 @@ static void free_single_t(eml_single_t *s) {
     free(s);
 }
 
+/*
+ * free_super_t: Frees a eml_super_t.
+*/
 static void free_super_t(eml_super_t *s) {
     for(int i = 0; i < s->count; i++) {
         free_single_t(s->sets[i]);
@@ -972,6 +1036,9 @@ static void free_super_t(eml_super_t *s) {
     free(s);
 }
 
+/*
+ * free_emlobj: Frees an eml_obj.
+*/
 static void free_emlobj(eml_obj *e) {
     if (e->type == single) {
         free_single_t((eml_single_t*) e->data);
@@ -982,9 +1049,27 @@ static void free_emlobj(eml_obj *e) {
     // free(e); not a pointer to dynamic memory
 }
 
+/*
+ * free_results: Frees all eml_obj in 'result' Array.
+*/
 static void free_results() {
     for(int i = 0; i < result.used; i++) {
         free_emlobj(&result.array[i]);
+    }
+}
+
+/*
+ * free_header: Frees all eml_header_t in 'header' Linked List.
+*/
+static void free_header() {
+    eml_header_t *h = header;
+    while (header != NULL) {
+        header = header->next;
+
+        free(h->parameter);
+        free(h->value);
+        free(h);
+        h = header;
     }
 }
 
@@ -1013,16 +1098,4 @@ static void freeArray(Array *a) {
     free(a->array);
     a->array = NULL;
     a->used = a->size = 0;
-}
-
-static void free_header() {
-    eml_header_t *h = header;
-    while (header != NULL) {
-        header = header->next;
-
-        free(h->parameter);
-        free(h->value);
-        free(h);
-        h = header;
-    }
 }
