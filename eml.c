@@ -858,7 +858,7 @@ static char *format_eml_number(eml_number *e) {
 }
 
 /*
- * print_standard_k: Prints an eml_standard_k.
+ * print_standard_k: Prints an eml_standard_k to stdout.
 */
 static void print_standard_k(eml_standard_k *k) {
     eml_reps reps = k->reps;
@@ -896,7 +896,7 @@ static void print_standard_k(eml_standard_k *k) {
 }
 
 /*
- * print_standard_varied_k: Prints an eml_standard_varied_k.
+ * print_standard_varied_k: Prints an eml_standard_varied_k to stdout.
 */
 static void print_standard_varied_k(eml_standard_varied_k *k) {
     int count = k->sets;
@@ -913,7 +913,7 @@ static void print_standard_varied_k(eml_standard_varied_k *k) {
 }
 
 /*
- * print_single_t: Prints a eml_single_t.
+ * print_single_t: Prints a eml_single_t to stdout.
 */
 static void print_single_t(eml_single_t *s) {
     printf("--- Printing single_t ---\n");
@@ -953,7 +953,7 @@ static void print_single_t(eml_single_t *s) {
 }
 
 /*
- * print_super_t: Prints a eml_super_t.
+ * print_super_t: Prints a eml_super_t to stdout.
 */
 static void print_super_t(eml_super_t *s) {
     printf("-------------------- Super --------------------\n");
@@ -964,6 +964,9 @@ static void print_super_t(eml_super_t *s) {
     return;
 }
 
+/*
+ * print_circuit_t: Prints a eml_circuit_t to stdout.
+*/
 static void print_circuit_t(eml_circuit_t *c) {
     printf("------------------- Circuit -------------------\n");
     for (int i = 0; i < c->count; i++) {
@@ -974,7 +977,7 @@ static void print_circuit_t(eml_circuit_t *c) {
 }
 
 /*
- * print_emlobj: Prints an eml_obj.
+ * print_emlobj: Prints an eml_obj to stdout.
 */
 static void print_emlobj(eml_obj *e) {
     switch (e->type) {
