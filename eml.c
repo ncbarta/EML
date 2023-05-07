@@ -107,10 +107,11 @@ int main(int argc, char *argv[]){
 
     // Superset/Circuit
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
+    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}circuit(\"squat\":5x5;\"squat\":4x4;);"; // standard
 
     // Name 
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"nathans-super-epic-amazing-special-exercise-with-some-awesomely-cool-modifications-and-a-super-long-name-that-has-128-characters\":5x5;"; //max
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"E\":5x5;"; // min
+    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"E\":5x5;"; // min
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
 
     emlstringlen = strlen(emlstring);
@@ -963,14 +964,29 @@ static void print_super_t(eml_super_t *s) {
     return;
 }
 
+static void print_circuit_t(eml_circuit_t *c) {
+    printf("------------------- Circuit -------------------\n");
+    for (int i = 0; i < c->count; i++) {
+        print_single_t(c->sets[i]);
+    }
+    printf("----------------- Circuit End -----------------\n");
+    return;
+}
+
 /*
  * print_emlobj: Prints an eml_obj.
 */
 static void print_emlobj(eml_obj *e) {
-    if (e->type == single) {
-        print_single_t((eml_single_t*) e->data);
-    } else {
-        print_super_t((eml_super_t*) e->data);
+    switch (e->type) {
+        case single:
+            print_single_t((eml_single_t*) e->data);
+            break;
+        case super:
+            print_super_t((eml_super_t*) e->data);
+            break;
+        case circuit:
+            print_circuit_t((eml_circuit_t*) e->data);
+            break;
     }
 }
 
