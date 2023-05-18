@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 // #define EML_PARSER_VERSION "0.0.0"
+#define DEBUG
 
 /*
  * The maximum length a user-input string may be (excluding sentinel)
@@ -26,7 +27,7 @@ static char weight[4];
  * emlString - The eml to be parsed
  * emlstringlen - The length of the emlString (excluding sentinel)
  * current_position - The index of emlString the parser is currently on
-*/
+ */
 static char *emlString;
 static int emlstringlen;
 static int current_postition;
@@ -35,25 +36,26 @@ static int current_postition;
  * Parser Output:
  * result - Parsed eml objects
  * header - Linked List of header tokens
-*/
+ */
 static Array result;
 static eml_header_t *header;
 
+int parse(char *eml_string);
+static int parse_header();
+
 static void validate_header_t(eml_header_t *h);
 
-static void parse();
-static void parse_header();
-static char *parse_string();
-static eml_header_t *parse_header_t();
-static eml_super_t *parse_super_t();
-static eml_single_t *parse_single_t();
+static int parse_string(char **result);
 
-static void cond_bail_parse_single_t(void *p, eml_single_t *tst);
-static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount);
+static int parse_header_t(eml_header_t **tht);
+static int parse_super_t(eml_super_t **tsupt);
+static int parse_single_t(eml_single_t **tst);
+
+static int flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount);
 static void moveToAsymmetric(eml_single_t *tst, bool side);
-static void upgradeToAsymmetric(eml_single_t *tst);
-static void upgradeToStandardVaried(eml_single_t *tst);
-static void upgradeToStandard(eml_single_t *tst);
+static int upgradeToAsymmetric(eml_single_t *tst);
+static int upgradeToStandardVaried(eml_single_t *tst);
+static int upgradeToStandard(eml_single_t *tst);
 
 static char *format_eml_number(eml_number *e);
 static void print_standard_k(eml_standard_k *k);
@@ -114,41 +116,50 @@ int main(int argc, char *argv[]){
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"E\":5x5;"; // min
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
 
-    emlstringlen = strlen(emlstring);
+    int error = no_error;
+    if ((error = parse(emlstring))) {
+        #ifdef DEBUG
+            printf("Failed with error: %d\n", error);
+            printf("%s\n", emlstring);
 
-    printf("EML String: %s, length: %i\n", emlstring, emlstringlen);
+            for(int i = 0; i < current_postition - 1; i++) {
+                printf(" ");
+            }
 
-    emlString = malloc(sizeof(char) * emlstringlen + 1);
-    strcpy(emlString, emlstring);
-
-    // https://linux.die.net/man/3/asprintf
-
-    // printf(emlString);
-    // fflush(stdout);
-
-    initArray(&result, 4);
-    parse();
-
-    // Print & Free
-    for(int i = 0; i < result.used; i++) {
-        print_emlobj(&result.array[i]);
-        free_emlobj(&result.array[i]);
+            printf("^\n");
+        #endif
     }
-    
-    free(emlString);
-    free_header();
-    return 0;
+
+    #ifdef DEBUG
+        // Print & Free
+        for(int i = 0; i < result.used; i++) {
+            print_emlobj(&result.array[i]);
+        }
+        
+        free_results();
+        free_header();
+    #endif
+
+    return error;
 }
 
 /*
  * parse: Entry point for parsing eml. Starts at '{', ends at (emlstringlen - 1)
-*/
-static void parse() {
+ */
+int parse(char *eml_string) {
+    emlString = eml_string;
+    emlstringlen = strlen(eml_string);
     current_postition = 0;
 
+    initArray(&result, 4);
+
+    #ifdef DEBUG
+        printf("EML String: %s, length: %i\n", eml_string, emlstringlen);
+    #endif
+
     eml_super_t *tsupt = NULL;
-    eml_circuit_t *tcirt = NULL;
     eml_single_t *tst = NULL;
+    int error = 0;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -156,11 +167,17 @@ static void parse() {
         switch (current) {
         case (int)'{': // Give control to parse_header()
             parse_header();
-            printf("parsed version: %s, parsed weight: %s\n", version, weight);
-            printf("-------------------------\n");
+
+            #ifdef DEBUG
+                printf("parsed version: %s, parsed weight: %s\n", version, weight);
+                printf("-------------------------\n");
+            #endif
+
             break;
         case (int)'s': // Give control to parse_super_t()
-            tsupt = parse_super_t();
+            if ((error = parse_super_t(&tsupt))) {
+                goto bail;
+            }
 
             eml_obj temp_super;
             temp_super.type = super;
@@ -168,17 +185,21 @@ static void parse() {
             insertArray(&result, temp_super);
 
             break;
-        case (int)'c': // Give control to parse_super_t() *probably
-            tcirt = parse_super_t();
+        case (int)'c': // Give control to parse_super_t()
+            if ((error = parse_super_t(&tsupt))) {
+                goto bail;
+            }
 
             eml_obj temp_cirt;
             temp_cirt.type = circuit;
-            temp_cirt.data = tcirt;
+            temp_cirt.data = tsupt;
             insertArray(&result, temp_cirt);
 
             break;
-        case (int)'\"': // Give control to parse_single_t()
-            tst = parse_single_t(tst);
+        case (int)'\"': // Give control to parse_single_t() 
+            if ((error = parse_single_t(&tst))) {
+                goto bail;
+            }
 
             eml_obj temp_single;
             temp_single.type = single;
@@ -190,97 +211,136 @@ static void parse() {
             ++current_postition;
             break;
         default:
-            break;
+            error = unexpected_error;
+            
+            if (tst != NULL) {
+                free_single_t(tst);
+            }
+
+            if (tsupt != NULL) {
+                free_super_t(tsupt);
+            }
+
+            goto bail;
         }
     }
-    return;
+
+    return no_error;
+
+    bail:
+        free_results();
+        free_header();
+        return error;
 }
 
 /*
  * parse_header: Parses header section or exits. Starts on "{" of header, ends on char succeeding "}"
 */
-static void parse_header() {
+static int parse_header() {
     eml_header_t *tht = NULL;
+    int error = no_error;
+
+    if (emlString[current_postition++] != (int)'{') {
+        error = missing_header_start_char;
+        return error;
+    }
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
 
         switch (current){
-        case (int)'{':
-            current_postition++;
-            break;
         case (int)'}': // Release control & inc
             ++current_postition;
-            return;
+            return no_error;
         case (int)',':
             ++current_postition;
             break;
         case (int)'\"':
-            tht = parse_header_t(); // Pass control to new_parse_header_t()
+            if ((error = parse_header_t(&tht))) {
+                return error;
+            }
             validate_header_t(tht);
             tht->next = header;
             header = tht;
             break;
         default:
-            exit(1);
-            break;
+            return unexpected_error;
         }
     }
+
+    error = unexpected_error;
+
+    return error;
 }
 
 /*
  * parse_header_t: Returns an eml_header_t or exits. Starts on '"', ends on ',' or '}'.
 */
-static eml_header_t *parse_header_t() {
-    eml_header_t *tht = malloc(sizeof(eml_header_t));
+static int parse_header_t(eml_header_t **tht) {
+    *tht = malloc(sizeof(eml_header_t));
+    if (*tht == NULL) {
+        return allocation_error;
+    }
     
-    bool header_header_t_pv = false; // Toggle between parameter & value
+    bool pv = false; // Toggle between parameter & value
+
+    int error = no_error;
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
 
         switch (current) {
             case (int)'}': // Release control
-                return tht;
+                return no_error;
             case (int)',': // Release control
-                return tht;
+                return no_error;
             case (int)':':
-                header_header_t_pv = true;
+                pv = true;
                 ++current_postition;
                 break;
             case (int)'\"':
-                if (header_header_t_pv == false) {
-                    tht->parameter = parse_string();
-                    if (tht->parameter == NULL) {
-                        free(tht);
-                        exit(1);
+                if (pv == false) {
+                    if ((error = parse_string(&(*tht)->parameter))) {
+                        goto bail;
                     }
                 }
                 else {
-                    tht->value = parse_string();
-                    if (tht->value == NULL) {
-                        free(tht->parameter);
-                        free(tht);
-                        exit(1);
+                    if ((error = parse_string(&(*tht)->value))) {
+                        goto bail;
                     }
                 }
                 break;
             default:
-                exit(1);
-                break;
+                error = unexpected_error;
+                goto bail;
         }
     }
 
-    return NULL;
+    error = unexpected_error;
+
+    bail:
+        if (*tht != NULL) {
+            if ((*tht)->parameter != NULL) {
+                free((*tht)->parameter);
+            }
+
+            if ((*tht)->value != NULL) {
+                free((*tht)->value);
+            }
+
+            free(*tht);
+        }
+
+        return error;
 }
 
 /*
  * parse_super_t: Returns an eml_super_t or exits. Starts on 's', ends succeeding ')'.
 */
-static eml_super_t *parse_super_t() {
-    eml_super_t *tsupt = NULL; // Will be allocated just in time
+static int parse_super_t(eml_super_t **tsupt) {
     eml_single_t *tst = NULL;
 
+    int error = no_error;
     Array dynamicSets; // janky, I don't like this
 
     initArray(&dynamicSets, 2);
@@ -293,56 +353,74 @@ static eml_super_t *parse_super_t() {
                 ++current_postition;
                 break;
             case (int)'\"':
-                tst = parse_single_t();
+                if ((error = parse_single_t(&tst))) {
+                    return error;
+                }
 
                 eml_obj temp;
                 temp.type = single;
                 temp.data = tst;
                 insertArray(&dynamicSets, temp);
+
                 break;
             case (int)')':
                 // pass back tsupt
-                tsupt = calloc(1, sizeof(int) + sizeof(eml_single_t) * dynamicSets.used);
-                if (tsupt == NULL) {
+                *tsupt = calloc(1, sizeof(int) + sizeof(eml_single_t) * dynamicSets.used);
+                if (*tsupt == NULL) {
                     for (int i = 0; i < dynamicSets.used; i++) {
-                        free(dynamicSets.array[i].data);
+                        free_emlobj(dynamicSets.array[i].data);
                     }
                     freeArray(&dynamicSets);
-                    free_results();
-                    exit(1);
+                    return allocation_error;
                 }
-                tsupt->count = dynamicSets.used;
+                (*tsupt)->count = dynamicSets.used;
                 for (int i = 0; i < dynamicSets.used; i++) {
-                    tsupt->sets[i] = ((eml_single_t*) dynamicSets.array[i].data);
+                    (*tsupt)->sets[i] = ((eml_single_t*) dynamicSets.array[i].data);
                 }
                 freeArray(&dynamicSets);
 
                 ++current_postition;
-                return tsupt;
+                return no_error;
             default: // skip {'u', 'p', 'e', 'r'} and {'i', 'r', 'c', 'u', 'i', 't'}
                 ++current_postition;
                 break;
         }
     }
 
-    // Add error message
-    exit(1);
+    error = unexpected_error;
 
-    return NULL; // Should not return NULL
+    if (dynamicSets.array != NULL) {
+        for (int i = 0; i < dynamicSets.used; i++) {
+            free_emlobj(dynamicSets.array[i].data);
+        }
+        freeArray(&dynamicSets);
+    }
+
+    return error;
 }
 
 /*
  * parse_single_t: Returns an eml_single_t or exits. Starts on '"', ends succeeding ';'
 */
-static eml_single_t *parse_single_t() {
-    eml_single_t *tst = calloc(1, sizeof(eml_single_t));
+static int parse_single_t(eml_single_t **tst) {
+    *tst = malloc(sizeof(eml_single_t));
     if (tst == NULL) {
-        free_results();
-        exit(1);
-    }
+        return allocation_error;
+    } 
 
-    tst->name = parse_string();
-    cond_bail_parse_single_t(tst->name, tst);
+    // Initialize eml_single_t
+    (*tst)->name = NULL;
+    (*tst)->no_work = NULL;
+    (*tst)->standard_work = NULL;
+    (*tst)->standard_varied_work = NULL;
+    (*tst)->asymmetric_work = NULL;
+
+    int error = no_error;
+    // #define BAIL(e) { error = e; goto bail;}
+
+    if ((error = parse_string(&(*tst)->name))) {
+        goto bail;
+    }
 
     eml_kind_flag kind = none;
     eml_modifier_flag modifier = no_mod; 
@@ -354,8 +432,8 @@ static eml_single_t *parse_single_t() {
     uint32_t temp;              // Used for building eml_number in `default`
 
     if (emlString[current_postition++] != (int)':') {
-        printf("You must include the ':' separator between NAME and WORK");
-        cond_bail_parse_single_t(NULL, tst);
+        error = name_work_separator_error;
+        goto bail;
     }
 
     while (current_postition < emlstringlen) {
@@ -368,20 +446,26 @@ static eml_single_t *parse_single_t() {
         case (int)':':
             // Upgrade to asymetric_k
             // Write value/modifier. If kind == standard_varied_work, write as macro.
-            flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
+            if ((error = flush(*tst, NULL, kind, modifier, &buffer_int, &dcount))) {
+                goto bail;
+            } 
 
             modifier = no_mod;
             kind = none;
 
             // Upgrade existing eml_single_t to asymmetric
-            upgradeToAsymmetric(tst);
+            if ((error = upgradeToAsymmetric(*tst))) {
+                goto bail;
+            }
             
             ++current_postition;
             break;
         case (int)'x':
             // Allocate standard_work & set sets.
-            upgradeToStandard(tst);
-            tst->standard_work->sets = buffer_int;
+            if ((error = upgradeToStandard(*tst))) {
+                goto bail;
+            }
+            (*tst)->standard_work->sets = buffer_int;
 
             buffer_int = 0;
             kind = standard;
@@ -390,7 +474,9 @@ static eml_single_t *parse_single_t() {
             break;
         case (int)'(':
             // Allocate standard_varied_work & dealloc/transition standard_work
-            upgradeToStandardVaried(tst);
+            if ((error = upgradeToStandardVaried(*tst))) {
+                goto bail;
+            }
 
             vcount = 0;
             kind = standard_varied;
@@ -398,13 +484,15 @@ static eml_single_t *parse_single_t() {
             ++current_postition;
             break;
         case (int)',':
-            if (vcount > tst->standard_varied_work->sets) {
-                printf("Too many variable reps\n");
-                cond_bail_parse_single_t(NULL, tst);
+            if (vcount > (*tst)->standard_varied_work->sets) {
+                error = extra_variable_reps_error;
+                goto bail;
             }
 
             // Write reps/(internal)modifiers
-            flush(tst, &vcount, kind, modifier, &buffer_int, &dcount);
+            if ((error = flush(*tst, &vcount, kind, modifier, &buffer_int, &dcount))) {
+                goto bail;
+            }
 
             vcount++;
             modifier = no_mod;
@@ -412,39 +500,41 @@ static eml_single_t *parse_single_t() {
             ++current_postition;
             break;
         case (int)')':
-            if (vcount > tst->standard_varied_work->sets) {
-                printf("Too many variable reps\n");
-                cond_bail_parse_single_t(NULL, tst);
+            if (vcount > (*tst)->standard_varied_work->sets) {
+                error = extra_variable_reps_error;
+                goto bail;
             }
 
             // Write reps/(internal)modifiers
-            flush(tst, &vcount, kind, modifier, &buffer_int, &dcount);
+            if ((error = flush(*tst, &vcount, kind, modifier, &buffer_int, &dcount))) {
+                goto bail;
+            }
 
             vcount++;
             modifier = no_mod;
 
-            if (vcount < tst->standard_varied_work->sets) {
-                printf("Too few variable reps\n");
-                cond_bail_parse_single_t(NULL, tst);
+            if (vcount < (*tst)->standard_varied_work->sets) {
+                error = missing_variable_reps_error;
+                goto bail;
             }
             ++current_postition;
             break;
         case (int)'F':
             switch (kind) {
                 case none:
-                    printf("You cannot make 'no work' to failure");
-                    cond_bail_parse_single_t(NULL, tst);
+                    error = none_work_to_failure_error;
+                    goto bail;
                 case standard:
-                    tst->standard_work->reps.toFailure = true;
+                    (*tst)->standard_work->reps.toFailure = true;
                     break;
                 case standard_varied:
                     // Apply 'toFailure' to internal Reps
-                    if (vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[vcount].toFailure = true;
+                    if (vcount < (*tst)->standard_varied_work->sets) {
+                        (*tst)->standard_varied_work->vReps[vcount].toFailure = true;
                     }
                     else {
-                        printf("You cannot use 'to failure' as a macro");
-                        cond_bail_parse_single_t(NULL, tst);
+                        error = to_failure_used_as_macro_error;
+                        goto bail;
                     }
                     break;
             }
@@ -454,19 +544,19 @@ static eml_single_t *parse_single_t() {
         case (int)'T':
             switch (kind) {
                 case none:
-                    printf("You cannot add a modifier to none work");
-                    cond_bail_parse_single_t(NULL, tst);
+                    error = modifier_on_none_work_error;
+                    goto bail;
                 case standard:
-                    tst->standard_work->reps.isTime = true;
+                    (*tst)->standard_work->reps.isTime = true;
                     break;
                 case standard_varied:
                     // Apply 'isTime' to internal Reps
-                    if (vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[vcount].isTime = true;
+                    if (vcount < (*tst)->standard_varied_work->sets) {
+                        (*tst)->standard_varied_work->vReps[vcount].isTime = true;
                     }
                     else {
-                        printf("You cannot attach time as a macro");
-                        cond_bail_parse_single_t(NULL, tst);
+                        error = time_macro_error;
+                        goto bail;
                     }
                     break;
             }
@@ -476,15 +566,15 @@ static eml_single_t *parse_single_t() {
         case (int)'@':
             switch (kind) {
                 case none:
-                    printf("You cannot add a modifier to none work");
-                    cond_bail_parse_single_t(NULL, tst);
+                    error = modifier_on_none_work_error;
+                    goto bail;
                 case standard:
-                    tst->standard_work->reps.value = buffer_int;
+                    (*tst)->standard_work->reps.value = buffer_int;
                     break;
                 case standard_varied:
                     // Apply weight modifier to internal Reps (EX: 3x(5@120,...,...))
-                    if (vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[vcount].value = buffer_int;
+                    if (vcount < (*tst)->standard_varied_work->sets) {
+                        (*tst)->standard_varied_work->vReps[vcount].value = buffer_int;
                     }
                     break;
             }
@@ -498,15 +588,15 @@ static eml_single_t *parse_single_t() {
         case (int)'%':
             switch (kind) {
                 case none:
-                    printf("You cannot add a modifier to none work");
-                    cond_bail_parse_single_t(NULL, tst);
+                    error = modifier_on_none_work_error;
+                    goto bail;
                 case standard:
-                    tst->standard_work->reps.value = buffer_int;
+                    (*tst)->standard_work->reps.value = buffer_int;
                     break;
                 case standard_varied:
                     // Apply weight modifier to internal Reps (EX: 3x(5%120,...,...))
-                    if (vcount < tst->standard_varied_work->sets) {
-                        tst->standard_varied_work->vReps[vcount].value = buffer_int;
+                    if (vcount < (*tst)->standard_varied_work->sets) {
+                        (*tst)->standard_varied_work->vReps[vcount].value = buffer_int;
                     }
                     break;
             }
@@ -519,18 +609,18 @@ static eml_single_t *parse_single_t() {
             break;
         case (int)'.':
             if (kind == none) {
-                printf("You cannot have fractional sets");
-                cond_bail_parse_single_t(NULL, tst);
+                error = fractional_sets_error;
+                goto bail;
             }
 
             if (dcount) {
-                printf("You cannot have multiple radix points");
-                cond_bail_parse_single_t(NULL, tst);
+                error = multiple_radix_points_error;
+                goto bail;
             }
 
             if (modifier == no_mod) {
-                printf("You cannot have fractional reps / timesets");
-                cond_bail_parse_single_t(NULL, tst);
+                error = fractional_none_modifier_value_error;
+                goto bail;
             }
 
             // Set H bit, potential overflow handled in `default`
@@ -541,22 +631,24 @@ static eml_single_t *parse_single_t() {
             break;
         case (int)';':
             // Write value/modifier. If kind == standard_varied_work, write as macro.
-            flush(tst, NULL, kind, modifier, &buffer_int, &dcount);
+            if ((error = flush(*tst, NULL, kind, modifier, &buffer_int, &dcount))) {
+                goto bail;
+            }
 
-            if (tst->asymmetric_work != NULL) {
-                moveToAsymmetric(tst, 1);
+            if ((*tst)->asymmetric_work != NULL) {
+                moveToAsymmetric(*tst, 1);
             }
 
             ++current_postition;
-            return tst; // Give control back
+            return no_error; // Give control back
         default:
             switch (dcount) {
                 case 0: // Before radix
                     temp = buffer_int * 10U + (unsigned int)current - '0';
 
                     if (temp > 21474835U) { 
-                        printf("Overflow");
-                        cond_bail_parse_single_t(NULL, tst);
+                        error = integral_overflow_error;
+                        goto bail;
                     }
 
                     buffer_int = temp;
@@ -565,8 +657,8 @@ static eml_single_t *parse_single_t() {
                     temp = buffer_int + ((unsigned int)current - '0') * 10U;
 
                     if ((temp & eml_number_mask) > 2147483500U) {
-                        printf("FP Overflow");
-                        cond_bail_parse_single_t(NULL, tst);
+                        error = fp_overflow_error;
+                        goto bail;
                     }
 
                     buffer_int = temp;
@@ -576,17 +668,16 @@ static eml_single_t *parse_single_t() {
                     temp = buffer_int + ((unsigned int)current - '0');
 
                     if ((temp & eml_number_mask) > 2147483500U) {
-                        printf("FP Overflow");
-                        cond_bail_parse_single_t(NULL, tst);
+                        error = fp_overflow_error;
+                        goto bail;
                     }
 
                     buffer_int = temp;
                     dcount++;
                     break;
                 default:
-                    printf("Too many numbers right of the radix point");
-                    cond_bail_parse_single_t(NULL, tst);
-                    break;
+                    error = too_many_fp_digits;
+                    goto bail;
             }
             
             ++current_postition;
@@ -594,10 +685,11 @@ static eml_single_t *parse_single_t() {
         }
     }
 
-    // Throw error here for incomplete/incorrect eml string
-    cond_bail_parse_single_t(NULL, tst);
+    error = unexpected_error;
 
-    return NULL; // should never execute under normal conditions
+    bail:
+        free_single_t(*tst);
+        return error;
 }
 
 static void validate_header_t(eml_header_t *h) {
@@ -614,11 +706,9 @@ static void validate_header_t(eml_header_t *h) {
 
 /*
  * parse_string: Returns a string (char*) or exits. Starts on '"', ends succeeding the next '"'
-*/
-static char *parse_string() {
-    char *result;
-
-    char strbuf[MAX_NAME_LENGTH + 1];
+ */
+static int parse_string(char **result) {
+    static char strbuf[MAX_NAME_LENGTH + 1];
     uint32_t strindex = 0;
 
     ++current_postition; // skip '"'
@@ -630,25 +720,21 @@ static char *parse_string() {
                 ++current_postition;
 
                 if (strindex == 0) {
-                    printf("Strings must be at least one character");
-                    free_results();
-                    exit(1);
+                    return empty_string_error;
                 }
 
-                result = malloc(strindex + 1);
-                if (result == NULL) {
-                    free_results();
-                    exit(1);
+                *result = malloc(strindex + 1);
+                if (*result == NULL) {
+                    return allocation_error;
                 }
             
-                strncpy(result, strbuf, MAX_NAME_LENGTH + 1);
-                result[strindex] = '\0';
-                return result;
+                strncpy(*result, strbuf, MAX_NAME_LENGTH + 1);
+                (*result)[strindex] = '\0';
+                return no_error;
             default:
                 if (strindex > 127) {
-                    printf("String must be 128 characters or less");
-                    free_results();
-                    exit(1);
+                    free(*result);
+                    return string_length_error;
                 }
 
                 strbuf[strindex++] = current;
@@ -657,40 +743,30 @@ static char *parse_string() {
         }
     }
 
-    return NULL;
-}
-
-/*
- * cond_bail_parse_single_t: Conditionally stops the execution of parse_single_t (or child functions) if *p is NULL, frees tst, results, and exits.
-*/
-static void cond_bail_parse_single_t(void *p, eml_single_t *tst) {
-    if (p == NULL) {
-        free_single_t(tst);
-        free_results();
-        exit(1);
-    }
+    return no_error;
 }
 
 /* 
- * flush: Writes buf to the appropriate field in eml_single_t or exits. If there is none work, flush will malloc tst->no_work. 
+ * flush: Writes buf to the appropriate field in eml_single_t. If there is none work, flush will malloc tst->no_work. 
  *        If `vcount` is NULL, modifier will be applied as a macro. Resets `buf` and `dcount`.
-*/
-static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount) {
+ */
+static int flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount) {
     if (*dcount == 1) {
-        printf("There must be at least one digit following the radix point.");
-        cond_bail_parse_single_t(NULL, tst);
+        return missing_digit_following_radix_error;
     }
 
     switch (kind) {
         case none:
             switch (mod) {
                 case no_mod:
-                    tst->no_work = malloc(sizeof(int));
-                    cond_bail_parse_single_t(tst->no_work, tst);
+                    tst->no_work = malloc(sizeof(bool));
+                    if (tst->no_work == NULL) {
+                        return allocation_error;
+                    }
+
                     break;
                 default:
-                    printf("You cannot add a modifier to none work");
-                    cond_bail_parse_single_t(NULL, tst);
+                    return modifier_on_none_work_error;
             }
             break;
         case standard:
@@ -750,12 +826,12 @@ static void flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_m
 
     *buf = 0;
     *dcount = 0;
-    return;
+    return no_error;
 }
 
 /*
  * moveToAsymmetric: Moves tst->(no_work | standard_work | standard_varied_work) kind to the left (false) or right (true) side of tst->asymmetric_work.
-*/
+ */
 static void moveToAsymmetric(eml_single_t *tst, bool side) {
     if (tst->no_work != NULL) {
         if (side) {
@@ -788,10 +864,12 @@ static void moveToAsymmetric(eml_single_t *tst, bool side) {
 
 /*
  * upgradeToAsymmetric: Allocates tst->asymmetric_work & moves existing tst->(no_work | standard_work | standard_varied_work) kind to left side.
-*/
-static void upgradeToAsymmetric(eml_single_t *tst) {
+ */
+static int upgradeToAsymmetric(eml_single_t *tst) {
     tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
-    cond_bail_parse_single_t(tst->asymmetric_work, tst);
+    if (tst->asymmetric_work == NULL) {
+        return allocation_error;
+    }
 
     tst->asymmetric_work->left_none_k = NULL;
     tst->asymmetric_work->left_standard_k = NULL;
@@ -801,14 +879,17 @@ static void upgradeToAsymmetric(eml_single_t *tst) {
     tst->asymmetric_work->right_standard_varied_k = NULL;
 
     moveToAsymmetric(tst, 0);
+    return no_error;
 }
 
 /*
  * upgradeToStandardVaried: Allocates tst->standard_varied_work & migrates tst->standard_work.
-*/
-static void upgradeToStandardVaried(eml_single_t *tst) {
+ */
+static int upgradeToStandardVaried(eml_single_t *tst) {
     tst->standard_varied_work = malloc(sizeof(eml_reps) * tst->standard_work->sets + sizeof(eml_number));
-    cond_bail_parse_single_t(tst->standard_varied_work, tst);
+    if (tst->standard_varied_work == NULL) {
+        return allocation_error;
+    }
     
     tst->standard_varied_work->sets = tst->standard_work->sets;
 
@@ -821,23 +902,27 @@ static void upgradeToStandardVaried(eml_single_t *tst) {
 
     free(tst->standard_work);
     tst->standard_work = NULL;
+    return no_error;
 }
 
 /*
  * upgradeToStandard: Allocates tst->standard_work.
-*/
-static void upgradeToStandard(eml_single_t *tst) {
+ */
+static int upgradeToStandard(eml_single_t *tst) {
     tst->standard_work = malloc(sizeof(eml_standard_k));
-    cond_bail_parse_single_t(tst->standard_work, tst);
+    if (tst->standard_work == NULL) {
+        return allocation_error;
+    }
+
     tst->standard_work->reps.isTime = false;
     tst->standard_work->reps.toFailure = false;
     tst->standard_work->reps.mod = no_mod;
-    return;
+    return no_error;
 }
 
 /*
  * format_eml_number: Returns a temporary formatted eml_number string which is valid until next call or exits.
-*/
+ */
 static char *format_eml_number(eml_number *e) {
     static char f[12];
 
@@ -849,8 +934,9 @@ static char *format_eml_number(eml_number *e) {
         sprintf(f, "%u", *e);
     }
 
-    if (f[11] != '\0') {
+    if (f[11] != '\0') { // TODO: Get rid of this / pass the error through. This function is currently only used in DEBUG mode but if it were not...
         free_results();
+        free_header();
         exit(1);
     }
 
@@ -859,7 +945,7 @@ static char *format_eml_number(eml_number *e) {
 
 /*
  * print_standard_k: Prints an eml_standard_k to stdout.
-*/
+ */
 static void print_standard_k(eml_standard_k *k) {
     eml_reps reps = k->reps;
 
@@ -897,7 +983,7 @@ static void print_standard_k(eml_standard_k *k) {
 
 /*
  * print_standard_varied_k: Prints an eml_standard_varied_k to stdout.
-*/
+ */
 static void print_standard_varied_k(eml_standard_varied_k *k) {
     int count = k->sets;
     printf("%i sets\n", count);
@@ -914,7 +1000,7 @@ static void print_standard_varied_k(eml_standard_varied_k *k) {
 
 /*
  * print_single_t: Prints a eml_single_t to stdout.
-*/
+ */
 static void print_single_t(eml_single_t *s) {
     printf("--- Printing single_t ---\n");
     printf("Name: %s\n", s->name);
@@ -954,7 +1040,7 @@ static void print_single_t(eml_single_t *s) {
 
 /*
  * print_super_t: Prints a eml_super_t to stdout.
-*/
+ */
 static void print_super_t(eml_super_t *s) {
     printf("-------------------- Super --------------------\n");
     for (int i = 0; i < s->count; i++) {
@@ -966,7 +1052,7 @@ static void print_super_t(eml_super_t *s) {
 
 /*
  * print_circuit_t: Prints a eml_circuit_t to stdout.
-*/
+ */
 static void print_circuit_t(eml_circuit_t *c) {
     printf("------------------- Circuit -------------------\n");
     for (int i = 0; i < c->count; i++) {
@@ -978,7 +1064,7 @@ static void print_circuit_t(eml_circuit_t *c) {
 
 /*
  * print_emlobj: Prints an eml_obj to stdout.
-*/
+ */
 static void print_emlobj(eml_obj *e) {
     switch (e->type) {
         case single:
@@ -995,7 +1081,7 @@ static void print_emlobj(eml_obj *e) {
 
 /*
  * free_single_t: Frees a eml_single_t.
-*/
+ */
 static void free_single_t(eml_single_t *s) {
     if (s->name != NULL) {
         free(s->name);
@@ -1046,7 +1132,7 @@ static void free_single_t(eml_single_t *s) {
 
 /*
  * free_super_t: Frees a eml_super_t.
-*/
+ */
 static void free_super_t(eml_super_t *s) {
     for(int i = 0; i < s->count; i++) {
         free_single_t(s->sets[i]);
@@ -1057,20 +1143,18 @@ static void free_super_t(eml_super_t *s) {
 
 /*
  * free_emlobj: Frees an eml_obj.
-*/
+ */
 static void free_emlobj(eml_obj *e) {
     if (e->type == single) {
         free_single_t((eml_single_t*) e->data);
     } else {
         free_super_t((eml_super_t*) e->data);
     }
-
-    // free(e); not a pointer to dynamic memory
 }
 
 /*
  * free_results: Frees all eml_obj in 'result' Array.
-*/
+ */
 static void free_results() {
     for(int i = 0; i < result.used; i++) {
         free_emlobj(&result.array[i]);
@@ -1079,7 +1163,7 @@ static void free_results() {
 
 /*
  * free_header: Frees all eml_header_t in 'header' Linked List.
-*/
+ */
 static void free_header() {
     eml_header_t *h = header;
     while (header != NULL) {

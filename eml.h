@@ -143,3 +143,29 @@ typedef struct {
     uint32_t used;
     uint32_t size;
 } Array;
+
+/*
+ * Errors
+ */
+enum Errors {
+    no_error,                             // Program terminated successfully (or there's a REALLY bad error)
+    unexpected_error,
+    allocation_error,                     // Malloc returned an error
+    name_work_separator_error,            // You must include the ':' separator between NAME and WORK
+    extra_variable_reps_error,            // Too many variable reps
+    missing_variable_reps_error,          // Too few variable reps
+    none_work_to_failure_error,           // You cannot make 'no work' to failure
+    to_failure_used_as_macro_error,       // You cannot use 'to failure' as a macro
+    modifier_on_none_work_error,          // You cannot add a modifier to 'no work'
+    time_macro_error,                     // You cannot attach time as a macro
+    fractional_sets_error,                // You cannot have fractional sets
+    multiple_radix_points_error,          // You cannot have multiple radix points
+    fractional_none_modifier_value_error, // You cannot have fractional reps / timesets
+    integral_overflow_error,              // eml_number has overflowed integral part.
+    fp_overflow_error,                    // eml_number has overflowed while adding fp part.
+    too_many_fp_digits,                   // Too many numbers right of the radix point
+    empty_string_error,                   // Strings must be at least one character
+    string_length_error,                  // String must be 128 characters or less
+    missing_digit_following_radix_error,  // There must be at least one digit following the radix point
+    missing_header_start_char,            // eml string must start with header '{'
+} eml_error;
