@@ -86,37 +86,45 @@ typedef struct StandardVaried {
  * Example: "sl-rdl":5x5:4x4; // asymmetric single leg RDL's, five sets of five on left side, four sets of four on right.
  */
 typedef struct Asymmetric {
-    eml_standard_k *left_standard_k;
+    eml_standard_k        *left_standard_k;
     eml_standard_varied_k *left_standard_varied_k;
-    eml_none_k *left_none_k;
-    eml_standard_k *right_standard_k;
+    eml_none_k            *left_none_k;
+    eml_standard_k        *right_standard_k;
     eml_standard_varied_k *right_standard_varied_k;
-    eml_none_k *right_none_k;
+    eml_none_k            *right_none_k;
 } eml_asymmetric_k;
 
 /* EML Tokens */
 
 /*
- * eml_single_t - A single exercise with a `name` and work. Only one work will be initialized in it's final state.
+ * eml_single_t - A single exercise with a `name` and work.
  */
 typedef struct Single {
-    char *name;
-    eml_none_k *no_work;
-    eml_standard_k *standard_work;
+    char                  *name;
+    eml_none_k            *no_work;
+    eml_standard_k        *standard_work;
     eml_standard_varied_k *standard_varied_work;
-    eml_asymmetric_k *asymmetric_work;
+    eml_asymmetric_k      *asymmetric_work;
 } eml_single_t;
 
 /*
- * eml_super_t - A collection of eml_single_t.
+ * eml_single_t - A linked list node holding onto eml_single_t within a super.
+ */
+typedef struct SuperMember {
+    eml_single_t       *single;
+    struct SuperMember *next;
+} eml_super_member_t;
+
+/*
+ * eml_super_t - A collection of eml_super_member_t.
  */
 typedef struct Superset {
-    uint32_t count;
-    eml_single_t *sets[];
+    uint32_t           count;
+    eml_super_member_t *sets;
 } eml_super_t;
 
 /*
- * eml_circuit_t - A collection of eml_single_t.
+ * eml_circuit_t - A collection of eml_super_member_t.
  */
 typedef eml_super_t eml_circuit_t;
 
@@ -131,23 +139,23 @@ typedef enum EMLObjtype { single, super, circuit } eml_objtype;
  * eml_obj - Wrapper around an EML Token.
  */
 typedef struct EMLObj {
-    eml_objtype type;
-    void        *data;
+    eml_objtype   type;
+    void          *data;
+    struct EMLObj *next;
 } eml_obj;
 
 /*
- * Array - Vector of eml_obj.
+ * eml_result - Parser output in the form of a linked list for the header and objects respectively
  */
-typedef struct {
-    eml_obj *array;
-    uint32_t used;
-    uint32_t size;
-} Array;
+typedef struct Result {
+    eml_header_t *header;
+    eml_obj      *objs;
+} eml_result;
 
 /*
  * Errors
  */
-enum Errors {
+typedef enum Errors {
     no_error,                             // Program terminated successfully (or there's a REALLY bad error)
     unexpected_error,
     allocation_error,                     // Malloc returned an error

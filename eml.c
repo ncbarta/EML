@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 // #define EML_PARSER_VERSION "0.0.0"
-#define DEBUG
+// #define DEBUG
 
 /*
  * The maximum length a user-input string may be (excluding sentinel)
@@ -34,11 +34,9 @@ static int current_postition;
 
 /*
  * Parser Output:
- * result - Parsed eml objects
- * header - Linked List of header tokens
+ * result - Parsed eml header and objects
  */
-static Array result;
-static eml_header_t *header;
+static eml_result *result = NULL;
 
 int parse(char *eml_string);
 static int parse_header();
@@ -67,81 +65,7 @@ static void print_emlobj(eml_obj *e);
 static void free_single_t(eml_single_t *s);
 static void free_super_t(eml_super_t *s);
 static void free_emlobj(eml_obj *e);
-static void free_results();
-static void free_header();
-
-static void initArray(Array *a, size_t size);
-static void insertArray(Array *a, eml_obj obj);
-static void freeArray(Array *a);
-
-int main(int argc, char *argv[]){
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;"; // standard
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4,3,2,1);"; // standard varied
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3:5x2;"; // asymetrical standard
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3,2,1):4x(4,3,2,1);"; // asymetrical standard varied
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\"::4x(4,3,2,1);"; // asymetrical mixed
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":;"; // none
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\"::;"; // asymetric none
-
-    // Multiple
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5;\"plyo-jump\":5x40;"; // standard multiple
-
-    // With weight modifiers
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5@120;"; // standard + weight
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":4x(4,3@30,2,1)@120;"; // standard varied inner modifier & macro
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x3@60:5xF@60;"; // asymetrical standard with modifiers
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(4,3@30,2,1)@120:3x(F,F,F)@550;"; // asymetrical mixed
-
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x60T@30;"; // standard + time + weight
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":4x(40T,30T@550,20T,10T)@120;"; // standard varied + time + weight
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x30T@440:5x30T@72;"; // asymetrical standard + time + weight
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3@30,20T,1)@120:3x(F,FT,FT)@550;"; // asymetrical mixed
-
-    // With RPE modifiers
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x5%100;"; // standard
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":5x(5,4%100,3,2@40000,1)@120;"; // standard varied with modifiers and macros
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770,3%30,20T,1)@120:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe
-
-    // Fractional 
-    // MAX: 21474835
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"squat\":8x7@.0;"; // standard fractional
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"sl-rdl\":4x(40T@770.99,3%30.50,20T,1)@120.2:3x(F%100,FT%100,FT)%80;"; // asymetrical standard + time + weight + rpe + frac
-
-    // Superset/Circuit
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}super(\"squat\":5x5;\"squat\":4x4;);"; // standard
-    char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}circuit(\"squat\":5x5;\"squat\":4x4;);"; // standard
-
-    // Name 
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"nathans-super-epic-amazing-special-exercise-with-some-awesomely-cool-modifications-and-a-super-long-name-that-has-128-characters\":5x5;"; //max
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"E\":5x5;"; // min
-    // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
-
-    int error = no_error;
-    if ((error = parse(emlstring))) {
-        #ifdef DEBUG
-            printf("Failed with error: %d\n", error);
-            printf("%s\n", emlstring);
-
-            for(int i = 0; i < current_postition - 1; i++) {
-                printf(" ");
-            }
-
-            printf("^\n");
-        #endif
-    }
-
-    #ifdef DEBUG
-        // Print & Free
-        for(int i = 0; i < result.used; i++) {
-            print_emlobj(&result.array[i]);
-        }
-        
-        free_results();
-        free_header();
-    #endif
-
-    return error;
-}
+static void free_result();
 
 /*
  * parse: Entry point for parsing eml. Starts at '{', ends at (emlstringlen - 1)
@@ -151,7 +75,12 @@ int parse(char *eml_string) {
     emlstringlen = strlen(eml_string);
     current_postition = 0;
 
-    initArray(&result, 4);
+    result = malloc(sizeof(eml_result));
+    if (result == NULL) {
+        return allocation_error;
+    }
+
+    eml_obj *obj_tail = NULL;
 
     #ifdef DEBUG
         printf("EML String: %s, length: %i\n", eml_string, emlstringlen);
@@ -179,48 +108,72 @@ int parse(char *eml_string) {
                 goto bail;
             }
 
-            eml_obj temp_super;
-            temp_super.type = super;
-            temp_super.data = tsupt;
-            insertArray(&result, temp_super);
+            eml_obj *temp_super = malloc(sizeof(eml_obj));
+            if (temp_super == NULL) {
+                error = allocation_error;
+                goto bail;
+            }
+            temp_super->type = super;
+            temp_super->data = tsupt;
+            temp_super->next = NULL;
 
+            if (result->objs == NULL) {
+                result->objs = temp_super;
+            } else {
+                obj_tail->next = temp_super;
+            }
+
+            obj_tail = temp_super;
             break;
         case (int)'c': // Give control to parse_super_t()
             if ((error = parse_super_t(&tsupt))) {
                 goto bail;
             }
 
-            eml_obj temp_cirt;
-            temp_cirt.type = circuit;
-            temp_cirt.data = tsupt;
-            insertArray(&result, temp_cirt);
+            eml_obj *temp_circuit = malloc(sizeof(eml_obj));
+            if (temp_circuit == NULL) {
+                error = allocation_error;
+                goto bail;
+            }
+            temp_circuit->type = circuit;
+            temp_circuit->data = tsupt;
+            temp_circuit->next = NULL;
 
+            if (result->objs == NULL) {
+                result->objs = temp_circuit;
+            } else {
+                obj_tail->next = temp_circuit;
+            }
+
+            obj_tail = temp_circuit;
             break;
         case (int)'\"': // Give control to parse_single_t() 
             if ((error = parse_single_t(&tst))) {
                 goto bail;
             }
 
-            eml_obj temp_single;
-            temp_single.type = single;
-            temp_single.data = tst;
-            insertArray(&result, temp_single);
+            eml_obj *temp_single = malloc(sizeof(eml_obj));
+            if (temp_single == NULL) {
+                error = allocation_error;
+                goto bail;
+            }
+            temp_single->type = single;
+            temp_single->data = tst;
+            temp_single->next = NULL;
 
+            if (result->objs == NULL) {
+                result->objs = temp_single;
+            } else {
+                obj_tail->next = temp_single;
+            }
+
+            obj_tail = temp_single;
             break;
         case (int)';':
             ++current_postition;
             break;
         default:
             error = unexpected_error;
-            
-            if (tst != NULL) {
-                free_single_t(tst);
-            }
-
-            if (tsupt != NULL) {
-                free_super_t(tsupt);
-            }
-
             goto bail;
         }
     }
@@ -228,8 +181,15 @@ int parse(char *eml_string) {
     return no_error;
 
     bail:
-        free_results();
-        free_header();
+        if (tst != NULL) {
+            free_single_t(tst);
+        }
+
+        if (tsupt != NULL) {
+            free_super_t(tsupt);
+        }
+
+        free_result();
         return error;
 }
 
@@ -260,8 +220,8 @@ static int parse_header() {
                 return error;
             }
             validate_header_t(tht);
-            tht->next = header;
-            header = tht;
+            tht->next = result->header;
+            result->header = tht;
             break;
         default:
             return unexpected_error;
@@ -338,12 +298,15 @@ static int parse_header_t(eml_header_t **tht) {
  * parse_super_t: Returns an eml_super_t or exits. Starts on 's', ends succeeding ')'.
 */
 static int parse_super_t(eml_super_t **tsupt) {
+    *tsupt = malloc(sizeof(eml_super_t));
+    if (tsupt == NULL) {
+        return allocation_error;
+    } 
+
     eml_single_t *tst = NULL;
+    eml_super_member_t *set_tail = NULL;
 
     int error = no_error;
-    Array dynamicSets; // janky, I don't like this
-
-    initArray(&dynamicSets, 2);
 
     while (current_postition < emlstringlen) {
         char current = emlString[current_postition];
@@ -357,28 +320,20 @@ static int parse_super_t(eml_super_t **tsupt) {
                     return error;
                 }
 
-                eml_obj temp;
-                temp.type = single;
-                temp.data = tst;
-                insertArray(&dynamicSets, temp);
+                eml_super_member_t *temp = malloc(sizeof(eml_super_member_t));
+                temp->single = tst;
+                temp->next = NULL;
 
+                if ((*tsupt)->sets == NULL) {
+                    (*tsupt)->sets = temp;
+                } else {
+                    set_tail->next = temp;
+                }
+
+                (*tsupt)->count++;
+                set_tail = temp;
                 break;
             case (int)')':
-                // pass back tsupt
-                *tsupt = calloc(1, sizeof(int) + sizeof(eml_single_t) * dynamicSets.used);
-                if (*tsupt == NULL) {
-                    for (int i = 0; i < dynamicSets.used; i++) {
-                        free_emlobj(dynamicSets.array[i].data);
-                    }
-                    freeArray(&dynamicSets);
-                    return allocation_error;
-                }
-                (*tsupt)->count = dynamicSets.used;
-                for (int i = 0; i < dynamicSets.used; i++) {
-                    (*tsupt)->sets[i] = ((eml_single_t*) dynamicSets.array[i].data);
-                }
-                freeArray(&dynamicSets);
-
                 ++current_postition;
                 return no_error;
             default: // skip {'u', 'p', 'e', 'r'} and {'i', 'r', 'c', 'u', 'i', 't'}
@@ -388,13 +343,6 @@ static int parse_super_t(eml_super_t **tsupt) {
     }
 
     error = unexpected_error;
-
-    if (dynamicSets.array != NULL) {
-        for (int i = 0; i < dynamicSets.used; i++) {
-            free_emlobj(dynamicSets.array[i].data);
-        }
-        freeArray(&dynamicSets);
-    }
 
     return error;
 }
@@ -935,8 +883,7 @@ static char *format_eml_number(eml_number *e) {
     }
 
     if (f[11] != '\0') { // TODO: Get rid of this / pass the error through. This function is currently only used in DEBUG mode but if it were not...
-        free_results();
-        free_header();
+        free_result();
         exit(1);
     }
 
@@ -1043,8 +990,10 @@ static void print_single_t(eml_single_t *s) {
  */
 static void print_super_t(eml_super_t *s) {
     printf("-------------------- Super --------------------\n");
-    for (int i = 0; i < s->count; i++) {
-        print_single_t(s->sets[i]);
+    eml_super_member_t *current = s->sets;
+    while(current != NULL) {
+        print_single_t(current->single);
+        current = current->next;
     }
     printf("------------------ Super End ------------------\n");
     return;
@@ -1055,8 +1004,10 @@ static void print_super_t(eml_super_t *s) {
  */
 static void print_circuit_t(eml_circuit_t *c) {
     printf("------------------- Circuit -------------------\n");
-    for (int i = 0; i < c->count; i++) {
-        print_single_t(c->sets[i]);
+    eml_super_member_t *current = c->sets;
+    while(current != NULL) {
+        print_single_t(current->single);
+        current = current->next;
     }
     printf("----------------- Circuit End -----------------\n");
     return;
@@ -1134,10 +1085,14 @@ static void free_single_t(eml_single_t *s) {
  * free_super_t: Frees a eml_super_t.
  */
 static void free_super_t(eml_super_t *s) {
-    for(int i = 0; i < s->count; i++) {
-        free_single_t(s->sets[i]);
+    eml_super_member_t *current = s->sets;
+    while(current != NULL) {
+        free_single_t(current->single);
+        
+        eml_super_member_t *t = current;
+        current = current->next;
+        free(t);
     }
-
     free(s);
 }
 
@@ -1153,52 +1108,26 @@ static void free_emlobj(eml_obj *e) {
 }
 
 /*
- * free_results: Frees all eml_obj in 'result' Array.
+ * free_results: Frees all eml_header_t and eml_obj in 'result'.
  */
-static void free_results() {
-    for(int i = 0; i < result.used; i++) {
-        free_emlobj(&result.array[i]);
+static void free_result() {
+    if (result == NULL) {
+        return;
     }
-}
 
-/*
- * free_header: Frees all eml_header_t in 'header' Linked List.
- */
-static void free_header() {
-    eml_header_t *h = header;
-    while (header != NULL) {
-        header = header->next;
+    eml_header_t *h = result->header;
+    while (h != NULL) {
+        result->header = h->next;
 
         free(h->parameter);
         free(h->value);
         free(h);
-        h = header;
+        h = result->header;
     }
-}
 
-static void initArray(Array *a, size_t size) {
-    a->array = calloc(size, sizeof(eml_obj));
-    if (a->array == NULL) {
-        exit(1);
+    eml_obj *obj = result->objs;
+    while(obj != NULL) {
+        free_emlobj(obj);
+        obj = obj->next;
     }
-    a->used = 0;
-    a->size = size;
-}
-
-static void insertArray(Array *a, eml_obj obj) {
-    if (a->used == a->size) {
-        a->size *= 2;
-        a->array = realloc(a->array, a->size * sizeof(eml_obj));
-        if (a->array == NULL) {
-            free_results();
-            exit(1);
-        }
-    }
-    a->array[a->used++] = obj;
-}
-
-static void freeArray(Array *a) {
-    free(a->array);
-    a->array = NULL;
-    a->used = a->size = 0;
 }
