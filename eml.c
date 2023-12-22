@@ -50,10 +50,10 @@ static int parse_super_t(eml_super_t **tsupt);
 static int parse_single_t(eml_single_t **tst);
 
 static int flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_modifier_flag mod, eml_number *buf, uint32_t *dcount);
-static void moveToAsymmetric(eml_single_t *tst, bool side);
-static int upgradeToAsymmetric(eml_single_t *tst);
-static int upgradeToStandardVaried(eml_single_t *tst);
-static int upgradeToStandard(eml_single_t *tst);
+static void move_to_asymmetric(eml_single_t *tst, bool side);
+static int upgrade_to_asymmetric(eml_single_t *tst);
+static int upgrade_to_standard_varied(eml_single_t *tst);
+static int upgrade_to_standard(eml_single_t *tst);
 
 static char *format_eml_number(eml_number *e);
 static void print_standard_k(eml_standard_k *k);
@@ -402,7 +402,7 @@ static int parse_single_t(eml_single_t **tst) {
             kind = none;
 
             // Upgrade existing eml_single_t to asymmetric
-            if ((error = upgradeToAsymmetric(*tst))) {
+            if ((error = upgrade_to_asymmetric(*tst))) {
                 goto bail;
             }
             
@@ -410,7 +410,7 @@ static int parse_single_t(eml_single_t **tst) {
             break;
         case (int)'x':
             // Allocate standard_work & set sets.
-            if ((error = upgradeToStandard(*tst))) {
+            if ((error = upgrade_to_standard(*tst))) {
                 goto bail;
             }
             (*tst)->standard_work->sets = buffer_int;
@@ -422,7 +422,7 @@ static int parse_single_t(eml_single_t **tst) {
             break;
         case (int)'(':
             // Allocate standard_varied_work & dealloc/transition standard_work
-            if ((error = upgradeToStandardVaried(*tst))) {
+            if ((error = upgrade_to_standard_varied(*tst))) {
                 goto bail;
             }
 
@@ -584,7 +584,7 @@ static int parse_single_t(eml_single_t **tst) {
             }
 
             if ((*tst)->asymmetric_work != NULL) {
-                moveToAsymmetric(*tst, 1);
+                move_to_asymmetric(*tst, 1);
             }
 
             ++current_postition;
@@ -778,9 +778,9 @@ static int flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_mo
 }
 
 /*
- * moveToAsymmetric: Moves tst->(no_work | standard_work | standard_varied_work) kind to the left (false) or right (true) side of tst->asymmetric_work.
+ * move_to_asymmetric: Moves tst->(no_work | standard_work | standard_varied_work) kind to the left (false) or right (true) side of tst->asymmetric_work.
  */
-static void moveToAsymmetric(eml_single_t *tst, bool side) {
+static void move_to_asymmetric(eml_single_t *tst, bool side) {
     if (tst->no_work != NULL) {
         if (side) {
             tst->asymmetric_work->right_none_k = tst->no_work;
@@ -811,9 +811,9 @@ static void moveToAsymmetric(eml_single_t *tst, bool side) {
 }
 
 /*
- * upgradeToAsymmetric: Allocates tst->asymmetric_work & moves existing tst->(no_work | standard_work | standard_varied_work) kind to left side.
+ * upgrade_to_asymmetric: Allocates tst->asymmetric_work & moves existing tst->(no_work | standard_work | standard_varied_work) kind to left side.
  */
-static int upgradeToAsymmetric(eml_single_t *tst) {
+static int upgrade_to_asymmetric(eml_single_t *tst) {
     tst->asymmetric_work = malloc(sizeof(eml_asymmetric_k));
     if (tst->asymmetric_work == NULL) {
         return allocation_error;
@@ -826,14 +826,14 @@ static int upgradeToAsymmetric(eml_single_t *tst) {
     tst->asymmetric_work->right_standard_k = NULL;
     tst->asymmetric_work->right_standard_varied_k = NULL;
 
-    moveToAsymmetric(tst, 0);
+    move_to_asymmetric(tst, 0);
     return no_error;
 }
 
 /*
- * upgradeToStandardVaried: Allocates tst->standard_varied_work & migrates tst->standard_work.
+ * upgrade_to_standard_varied: Allocates tst->standard_varied_work & migrates tst->standard_work.
  */
-static int upgradeToStandardVaried(eml_single_t *tst) {
+static int upgrade_to_standard_varied(eml_single_t *tst) {
     tst->standard_varied_work = malloc(sizeof(eml_reps) * tst->standard_work->sets + sizeof(eml_number));
     if (tst->standard_varied_work == NULL) {
         return allocation_error;
@@ -854,9 +854,9 @@ static int upgradeToStandardVaried(eml_single_t *tst) {
 }
 
 /*
- * upgradeToStandard: Allocates tst->standard_work.
+ * upgrade_to_standard: Allocates tst->standard_work.
  */
-static int upgradeToStandard(eml_single_t *tst) {
+static int upgrade_to_standard(eml_single_t *tst) {
     tst->standard_work = malloc(sizeof(eml_standard_k));
     if (tst->standard_work == NULL) {
         return allocation_error;
