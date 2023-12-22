@@ -42,8 +42,9 @@ int main(int argc, char const *argv[]) {
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"E\":5x5;"; // min
     // char emlstring[] = "{\"version\":\"1.0\",\"weight\":\"lbs\"}\"abcdefghijklmnopqrstuvwxyz\":5x5;";
 
+    eml_result *result;
     int error = no_error;
-    if ((error = parse(emlstring))) {
+    if ((error = parse(emlstring, &result))) {
         printf("Failed with error: %d\n", error);
         printf("%s\n", emlstring);
 
@@ -61,6 +62,6 @@ int main(int argc, char const *argv[]) {
         obj = obj->next;
     }
 
-    free_result();
+    free_result(result);
     return 0;
 }

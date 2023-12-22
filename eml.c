@@ -32,14 +32,8 @@ static char *emlString;
 static int emlstringlen;
 static int current_postition;
 
-/*
- * Parser Output:
- * result - Parsed eml header and objects
- */
-static eml_result *result = NULL;
-
-int parse(char *eml_string);
-static int parse_header();
+int parse(char *eml_string, eml_result **result);
+static int parse_header(eml_result *result);
 
 static void validate_header_t(eml_header_t *h);
 
@@ -65,18 +59,18 @@ static void print_emlobj(eml_obj *e);
 static void free_single_t(eml_single_t *s);
 static void free_super_t(eml_super_t *s);
 static void free_emlobj(eml_obj *e);
-static void free_result();
+static void free_result(eml_result *r);
 
 /*
  * parse: Entry point for parsing eml. Starts at '{', ends at (emlstringlen - 1)
  */
-int parse(char *eml_string) {
+int parse(char *eml_string, eml_result **result) {
     emlString = eml_string;
     emlstringlen = strlen(eml_string);
     current_postition = 0;
 
-    result = malloc(sizeof(eml_result));
-    if (result == NULL) {
+    *result = malloc(sizeof(eml_result));
+    if (*result == NULL) {
         return allocation_error;
     }
 
@@ -95,7 +89,7 @@ int parse(char *eml_string) {
 
         switch (current) {
         case (int)'{': // Give control to parse_header()
-            parse_header();
+            parse_header(*result);
 
             #ifdef DEBUG
                 printf("parsed version: %s, parsed weight: %s\n", version, weight);
@@ -117,8 +111,8 @@ int parse(char *eml_string) {
             temp_super->data = tsupt;
             temp_super->next = NULL;
 
-            if (result->objs == NULL) {
-                result->objs = temp_super;
+            if ((*result)->objs == NULL) {
+                (*result)->objs = temp_super;
             } else {
                 obj_tail->next = temp_super;
             }
@@ -139,8 +133,8 @@ int parse(char *eml_string) {
             temp_circuit->data = tsupt;
             temp_circuit->next = NULL;
 
-            if (result->objs == NULL) {
-                result->objs = temp_circuit;
+            if ((*result)->objs == NULL) {
+                (*result)->objs = temp_circuit;
             } else {
                 obj_tail->next = temp_circuit;
             }
@@ -161,8 +155,8 @@ int parse(char *eml_string) {
             temp_single->data = tst;
             temp_single->next = NULL;
 
-            if (result->objs == NULL) {
-                result->objs = temp_single;
+            if ((*result)->objs == NULL) {
+                (*result)->objs = temp_single;
             } else {
                 obj_tail->next = temp_single;
             }
@@ -189,14 +183,14 @@ int parse(char *eml_string) {
             free_super_t(tsupt);
         }
 
-        free_result();
+        free_result(*result);
         return error;
 }
 
 /*
  * parse_header: Parses header section or exits. Starts on "{" of header, ends on char succeeding "}"
 */
-static int parse_header() {
+static int parse_header(eml_result *result) {
     eml_header_t *tht = NULL;
     int error = no_error;
 
@@ -882,8 +876,8 @@ static char *format_eml_number(eml_number *e) {
         sprintf(f, "%u", *e);
     }
 
-    if (f[11] != '\0') { // TODO: Get rid of this / pass the error through. This function is currently only used in DEBUG mode but if it were not...
-        free_result();
+    if (f[11] != '\0') { // TODO: Get rid of this / pass the error through
+        // free_result();
         exit(1);
     }
 
@@ -1108,26 +1102,28 @@ static void free_emlobj(eml_obj *e) {
 }
 
 /*
- * free_results: Frees all eml_header_t and eml_obj in 'result'.
+ * free_results: Frees an eml_result.
  */
-static void free_result() {
-    if (result == NULL) {
+static void free_result(eml_result *r) {
+    if (r == NULL) {
         return;
     }
 
-    eml_header_t *h = result->header;
+    eml_header_t *h = r->header;
     while (h != NULL) {
-        result->header = h->next;
+        r->header = h->next;
 
         free(h->parameter);
         free(h->value);
         free(h);
-        h = result->header;
+        h = r->header;
     }
 
-    eml_obj *obj = result->objs;
+    eml_obj *obj = r->objs;
     while(obj != NULL) {
         free_emlobj(obj);
         obj = obj->next;
     }
+
+    free(r);
 }
