@@ -176,4 +176,6 @@ typedef enum Errors {
     string_length_error,                  // String must be 128 characters or less
     missing_digit_following_radix_error,  // There must be at least one digit following the radix point
     missing_header_start_char,            // eml string must start with header '{'
+    missing_version,                      // Header must contain version parameter
+    missing_weight_unit,                  // Header must contain weight unit parameter
 } eml_error;

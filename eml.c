@@ -6,10 +6,10 @@
 // #define EML_PARSER_VERSION "0.0.0"
 // #define DEBUG
 
-/*
- * The maximum length a user-input string may be (excluding sentinel)
- */
+// The maximum length a user-input string may be (excluding sentinel)
 #define MAX_NAME_LENGTH 128
+#define MAX_VERSION_STRING_LENGTH 12
+#define MAX_WEIGHT_UNIT_STRING_LENGTH 3
 
 #define true 1
 #define false 0
@@ -19,8 +19,8 @@
  * version - the version in the eml header
  * weight - the weight abbreviation in the eml header
  */ 
-static char version[13];
-static char weight[4];
+static char version[MAX_VERSION_STRING_LENGTH + 1];
+static char weight[MAX_WEIGHT_UNIT_STRING_LENGTH + 1];
 
 /*
  * Global Parser Vars:
@@ -90,6 +90,16 @@ int parse(char *eml_string, eml_result **result) {
         switch (current) {
         case (int)'{': // Give control to parse_header()
             parse_header(*result);
+
+            if (version == '\0') {
+                error = missing_version;
+                goto bail;
+            }
+
+            if (weight == '\0') {
+                error = missing_weight_unit;
+                goto bail;
+            }
 
             #ifdef DEBUG
                 printf("parsed version: %s, parsed weight: %s\n", version, weight);
@@ -634,15 +644,16 @@ static int parse_single_t(eml_single_t **tst) {
         return error;
 }
 
+/*
+ * validate_header_t: Checks and adds parser configuration from eml_header_t
+ */
 static void validate_header_t(eml_header_t *h) {
-    if (strcmp(h->parameter, "version") == 0) {
-        strncpy(version, h->value, 12);
-        version[11] = '\0';
-    }
-
-    if (strcmp(h->parameter, "weight") == 0) {
-        strncpy(weight, h->value, 4);
-        weight[3] = '\0';
+    if (version[0] == '\0' && strcmp(h->parameter, "version") == 0) {
+        strncpy(version, h->value, MAX_VERSION_STRING_LENGTH);
+        version[MAX_VERSION_STRING_LENGTH] = '\0';
+    } else if (weight[0] == '\0' && strcmp(h->parameter, "weight") == 0) {
+        strncpy(weight, h->value, MAX_WEIGHT_UNIT_STRING_LENGTH);
+        weight[MAX_WEIGHT_UNIT_STRING_LENGTH] = '\0';
     }
 }
 
