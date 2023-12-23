@@ -34,7 +34,6 @@ static char *emlString;
 static int emlstringlen;
 static int current_postition;
 
-int parse(char *eml_string, eml_result **result);
 static int parse_header(eml_result *result);
 
 static void validate_header_t(eml_header_t *h);
@@ -61,7 +60,6 @@ static void print_emlobj(eml_obj *e);
 static void free_single_t(eml_single_t *s);
 static void free_super_t(eml_super_t *s);
 static void free_emlobj(eml_obj *e);
-static void free_result(eml_result *r);
 
 /*
  * parse: Entry point for parsing eml. Starts at '{', ends at (emlstringlen - 1)
@@ -78,6 +76,9 @@ int parse(char *eml_string, eml_result **result) {
     if (*result == NULL) {
         return allocation_error;
     }
+
+    (*result)->header = NULL;
+    (*result)->objs = NULL;
 
     eml_obj *obj_tail = NULL;
 
@@ -1120,26 +1121,27 @@ static void free_emlobj(eml_obj *e) {
 /*
  * free_results: Frees an eml_result.
  */
-static void free_result(eml_result *r) {
-    if (r == NULL) {
+void free_result(eml_result *result) {
+    if (result == NULL) {
         return;
     }
 
-    eml_header_t *h = r->header;
+    eml_header_t *h = result->header;
     while (h != NULL) {
-        r->header = h->next;
+        result->header = h->next;
 
         free(h->parameter);
         free(h->value);
         free(h);
-        h = r->header;
+        h = result->header;
     }
 
-    eml_obj *obj = r->objs;
+    eml_obj *obj = result->objs;
     while(obj != NULL) {
         free_emlobj(obj);
         obj = obj->next;
     }
 
-    free(r);
+    free(result);
+    result = NULL;
 }
