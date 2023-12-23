@@ -181,4 +181,5 @@ typedef enum Errors {
 } eml_error;
 
 int parse(char *eml_string, eml_result **result);
-void free_result(eml_result *r);
+void print_result(eml_result *result);
+void free_result(eml_result *result);

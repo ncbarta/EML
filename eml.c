@@ -960,7 +960,7 @@ static void print_standard_varied_k(eml_standard_varied_k *k) {
  * print_single_t: Prints a eml_single_t to stdout.
  */
 static void print_single_t(eml_single_t *s) {
-    printf("--- Printing single_t ---\n");
+    printf("--- single_t ---\n");
     printf("Name: %s\n", s->name);
 
     if (s->no_work != NULL) {
@@ -1000,13 +1000,13 @@ static void print_single_t(eml_single_t *s) {
  * print_super_t: Prints a eml_super_t to stdout.
  */
 static void print_super_t(eml_super_t *s) {
-    printf("-------------------- Super --------------------\n");
+    printf("----- SUPER -----\n");
     eml_super_member_t *current = s->sets;
     while(current != NULL) {
         print_single_t(current->single);
         current = current->next;
     }
-    printf("------------------ Super End ------------------\n");
+    printf("--- SUPER END ---\n");
     return;
 }
 
@@ -1014,13 +1014,13 @@ static void print_super_t(eml_super_t *s) {
  * print_circuit_t: Prints a eml_circuit_t to stdout.
  */
 static void print_circuit_t(eml_circuit_t *c) {
-    printf("------------------- Circuit -------------------\n");
+    printf("----- CIRCUIT -----\n");
     eml_super_member_t *current = c->sets;
     while(current != NULL) {
         print_single_t(current->single);
         current = current->next;
     }
-    printf("----------------- Circuit End -----------------\n");
+    printf("--- CIRCUIT END ---\n");
     return;
 }
 
@@ -1038,6 +1038,28 @@ static void print_emlobj(eml_obj *e) {
         case circuit:
             print_circuit_t((eml_circuit_t*) e->data);
             break;
+    }
+}
+
+void print_result(eml_result *result) {
+    if (result == NULL) {
+        return;
+    }
+
+    printf("--- Parsed EML ---\n");
+    printf("Header:\n");
+
+    eml_header_t *h = result->header;
+    while (h != NULL) {
+        printf(" - Parameter: %s, Value: %s\n", h->parameter, h->value);
+        h = h->next;
+    }
+
+    printf("Body:\n");
+    eml_obj *obj = result->objs;
+    while(obj != NULL) {
+        print_emlobj(obj);
+        obj = obj->next;
     }
 }
 
@@ -1138,8 +1160,9 @@ void free_result(eml_result *result) {
 
     eml_obj *obj = result->objs;
     while(obj != NULL) {
+        result->objs = obj->next;
         free_emlobj(obj);
-        obj = obj->next;
+        obj = result->objs;
     }
 
     free(result);

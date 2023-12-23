@@ -56,12 +56,7 @@ int main(int argc, char const *argv[]) {
         return 0;
     }
 
-    eml_obj *obj = result->objs;
-    while(obj != NULL) {
-        print_emlobj(obj);
-        obj = obj->next;
-    }
-
+    print_result(result);
     free_result(result);
     return 0;
 }
