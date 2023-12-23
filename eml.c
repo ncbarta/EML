@@ -13,6 +13,8 @@
 
 #define true 1
 #define false 0
+#define right 1
+#define left 0
 
 /* 
  * Parser Parameters:
@@ -69,6 +71,9 @@ int parse(char *eml_string, eml_result **result) {
     emlstringlen = strlen(eml_string);
     current_postition = 0;
 
+    version[0] = 0;
+    weight[0] = 0;
+
     *result = malloc(sizeof(eml_result));
     if (*result == NULL) {
         return allocation_error;
@@ -91,12 +96,12 @@ int parse(char *eml_string, eml_result **result) {
         case (int)'{': // Give control to parse_header()
             parse_header(*result);
 
-            if (version == '\0') {
+            if (version[0] == '\0') {
                 error = missing_version;
                 goto bail;
             }
 
-            if (weight == '\0') {
+            if (weight[0] == '\0') {
                 error = missing_weight_unit;
                 goto bail;
             }
@@ -588,7 +593,7 @@ static int parse_single_t(eml_single_t **tst) {
             }
 
             if ((*tst)->asymmetric_work != NULL) {
-                move_to_asymmetric(*tst, 1);
+                move_to_asymmetric(*tst, right);
             }
 
             ++current_postition;
@@ -783,7 +788,7 @@ static int flush(eml_single_t *tst, uint32_t *vcount, eml_kind_flag kind, eml_mo
 }
 
 /*
- * move_to_asymmetric: Moves tst->(no_work | standard_work | standard_varied_work) kind to the left (false) or right (true) side of tst->asymmetric_work.
+ * move_to_asymmetric: Moves tst->(no_work | standard_work | standard_varied_work) kind to the left or right side of tst->asymmetric_work.
  */
 static void move_to_asymmetric(eml_single_t *tst, bool side) {
     if (tst->no_work != NULL) {
@@ -831,7 +836,7 @@ static int upgrade_to_asymmetric(eml_single_t *tst) {
     tst->asymmetric_work->right_standard_k = NULL;
     tst->asymmetric_work->right_standard_varied_k = NULL;
 
-    move_to_asymmetric(tst, 0);
+    move_to_asymmetric(tst, left);
     return no_error;
 }
 
