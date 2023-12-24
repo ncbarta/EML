@@ -687,7 +687,9 @@ static int parse_string(char **result) {
                     return allocation_error;
                 }
             
-                strncpy(*result, strbuf, MAX_NAME_LENGTH + 1);
+                for(int i = 0; i < strindex; i++) {
+                    (*result)[i] = strbuf[i];
+                }
                 (*result)[strindex] = '\0';
                 return no_error;
             default:
