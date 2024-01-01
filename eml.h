@@ -7,7 +7,11 @@ typedef uint32_t bool;
  *              MSB ("H") is reserved to "shift"
  *              decimal point by 2 places.
  *              
- *              Range: [0, 21,474,835.00]
+ *              Range: [0, 21,474,836.47]
+ *              When storing integers, 7 bits are
+ *              ignored as to constrain the number
+ *              to be less than the MAX of its
+ *              fractional counterpart.
  */
 typedef uint32_t eml_number;
 const uint32_t eml_number_mask = 0x7FFFFFFF;
@@ -36,19 +40,23 @@ typedef struct HeaderToken {
 typedef struct Reps {
     eml_number value;
 
-    union Modifier {
+    union {
         eml_number weight;
         eml_number rpe;
     } modifier;
 
-    // Decided against bitfields because of portability concerns
-    uint8_t isTime;     // Reps defined by time (Ex: isometric exercises)
-    uint8_t toFailure;  // Reps complete upon failure
-    uint8_t mod;        // Which modifier (if any) is being applied to reps
-                        // 0: No modifier
-                        // 1: Weight
-                        // 2: RPE
-                        // 3-7: Reserved
+    enum {
+        unmodified, 
+        unmodifiedFailure,
+        unmodifiedTime,
+        unmodifiedTimeFailure,
+        weight, 
+        weightFailure, 
+        timeWeight, 
+        timeWeightFaliure, 
+        rpe, 
+        timeRPE,
+    } type; 
 } eml_reps;
 
 /* EML Work (kind) */
@@ -178,6 +186,8 @@ typedef enum Errors {
     missing_header_start_char,            // eml string must start with header '{'
     missing_version,                      // Header must contain version parameter
     missing_weight_unit,                  // Header must contain weight unit parameter
+    bad_reps_type_transition,             // eml string had an incorrect application of 'F', 'T', '@', '%', or some combination therein to REPS
+    rpe_to_failure,                       // You cannot make RPE to failure
 } eml_error;
 
 int parse(char *eml_string, eml_result **result);
